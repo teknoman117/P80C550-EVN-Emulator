@@ -218,9 +218,18 @@ impl<A: Memory> CPU8051<A> {
                         mem.read_memory(Address::ExternalData(address as u16))
                     }
                     Register8051::DPTR => mem.read_memory(Address::ExternalData(self.data_pointer)),
-                    _ => Err("unsupported register for indirect load"),
+                    _ => Err("unsupported register for indirect load (external)"),
                 }
             }
+            AddressingMode::IndirectCode(register) => match register {
+                Register8051::DPTR => {
+                    mem.read_memory(Address::Code(self.data_pointer + (self.accumulator as u16)))
+                }
+                Register8051::PC => mem.read_memory(Address::Code(
+                    self.program_counter + (self.accumulator as u16) + 1,
+                )),
+                _ => Err("unsupported register for indirect load (code)"),
+            },
             _ => Err("unsupported addressing mode (load)"),
         }
     }
@@ -1251,6 +1260,16 @@ impl<A: Memory> CPU8051<A> {
                     3,
                 ))
             }
+            // MOVC A, @A+DPTR
+            0x93 => Ok((
+                ISA8051::MOVC(AddressingMode::IndirectCode(Register8051::DPTR)),
+                1,
+            )),
+            // MOVC A, @A+DPTR
+            0x83 => Ok((
+                ISA8051::MOVC(AddressingMode::IndirectCode(Register8051::PC)),
+                1,
+            )),
             // MOVX @DPTR, A
             0xF0 => Ok((
                 ISA8051::MOVX(
@@ -1579,6 +1598,10 @@ impl<A: Memory> CPU8051<A> {
             ISA8051::MOV(operand1, operand2) => {
                 let data = self.load(operand2)?;
                 self.store(operand1, data)
+            }
+            ISA8051::MOVC(operand) => {
+                self.accumulator = self.load(operand)?;
+                Ok(())
             }
             ISA8051::MOVX(operand1, operand2) => {
                 let data = self.load(operand2)?;
