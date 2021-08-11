@@ -2,14 +2,62 @@ use std::fs;
 use std::path::Path;
 use std::rc::Rc;
 
-enum AddressSpace {
-    Code,
-    Data,
+/* 8051 address spaces */
+enum Address {
+    Code(u32),
+    ExternalData(u32),
+    InternalData(u8),
+    SpecialFunctionRegister(u8),
+    Bit(u8),
+}
+
+/* 8051 registers */
+enum Register8051 {
+    R0,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    DPTR,
+    A,
+    CY,
+    PC,
+}
+
+/* 8051 flags */
+enum Flags8051 {
+    CY,
+    AC,
+    F0,
+    RS1,
+    RS0,
+    OV,
+    User,
+    P,
+}
+
+/* 8051 addressing modes */
+enum AddressingMode {
+    // 8-bit immediate (most immediates)
+    Immediate8(u8),
+    // 16-bit immediate (dptr load)
+    Immediate16(u16),
+    // register
+    Register(Register8051),
+    // internal ram direct address
+    Direct(u8),
+    // internal ram indirect address
+    Indirect(Register8051),
+    // indirect (DPTR or PC) + offset (A) indirect access (movx, movc)
+    IndirectOffset(Register8051),
 }
 
 trait Memory {
-    fn read_memory(&mut self, space: AddressSpace, address: usize) -> u8;
-    fn write_memory(&mut self, space: AddressSpace, address: usize, data: u8);
+    fn read_memory(&mut self, address : Address) -> Result<u8, &'static str>;
+    fn write_memory(&mut self, address : Address, data: u8) -> Result<(), &'static str>;
 }
 
 struct ROM {
@@ -25,16 +73,27 @@ impl ROM {
 }
 
 impl Memory for ROM {
-    fn read_memory(&mut self, _space: AddressSpace, address: usize) -> u8 {
-        if address < self.data.len() {
-            self.data[address]
+    fn read_memory(&mut self, address : Address) -> Result<u8, &'static str> {
+        let address = match address {
+            Address::Code(a) => Some(a as usize),
+            Address::ExternalData(a) => Some(a as usize),
+            _ => None
+        };
+
+        if let Some(a) = address {
+            if a < self.data.len() {
+                Ok(self.data[a])
+            } else {
+                Err("address out of range")
+            }
         } else {
-            0xFFu8
+            Err("unsupported addressing mode")
         }
     }
 
-    fn write_memory(&mut self, _space: AddressSpace, _address: usize, _data: u8) {
-        // it's ROM, do nothing
+    // all writes to ROM result in an error
+    fn write_memory(&mut self, _address: Address, _data: u8) -> Result<(), &'static str> {
+        Err("write attempted to read-only memory")
     }
 }
 
@@ -51,11 +110,42 @@ impl RAM {
 }
 
 impl Memory for RAM {
-    fn read_memory(&mut self, _space: AddressSpace, address: usize) -> u8 {
-        self.data[address]
+    fn read_memory(&mut self, address : Address) -> Result<u8, &'static str> {
+        let address = match address {
+            Address::Code(a) => Some(a as usize),
+            Address::ExternalData(a) => Some(a as usize),
+            Address::InternalData(a) => Some(a as usize),
+            _ => None
+        };
+
+        if let Some(a) = address {
+            if a < self.data.len() {
+                Ok(self.data[a as usize])
+            } else {
+                Err("address out of range")
+            }
+        } else {
+            Err("unsupported addressing mode")
+        }
     }
-    fn write_memory(&mut self, _space: AddressSpace, address: usize, data: u8) {
-        self.data[address] = data;
+
+    fn write_memory(&mut self, address: Address, data: u8) -> Result<(), &'static str> {
+        let address = match address {
+            Address::ExternalData(a) => Some(a as usize),
+            Address::InternalData(a) => Some(a as usize),
+            _ => None
+        };
+
+        if let Some(a) = address {
+            if a < self.data.len() {
+                self.data[a] = data;
+                Ok(())
+            } else {
+                Err("address out of range")
+            }
+        } else {
+            Err("unsupported addressing mode")
+        }
     }
 }
 
@@ -71,20 +161,23 @@ impl<A: Memory, B: Memory> MemoryMapperModule<A, B> {
 }
 
 impl<A: Memory, B: Memory> Memory for MemoryMapperModule<A, B> {
-    fn read_memory(&mut self, space: AddressSpace, address: usize) -> u8 {
-        match space {
-            AddressSpace::Code => Rc::get_mut(&mut self.rom)
+    fn read_memory(&mut self, address: Address) -> Result<u8, &'static str> {
+        match address {
+            Address::Code(a) => Rc::get_mut(&mut self.rom)
                 .unwrap()
-                .read_memory(AddressSpace::Data, address),
-            AddressSpace::Data => Rc::get_mut(&mut self.ram)
+                .read_memory(Address::ExternalData(a)),
+            Address::ExternalData(a) => Rc::get_mut(&mut self.ram)
                 .unwrap()
-                .read_memory(AddressSpace::Data, address),
+                .read_memory(Address::ExternalData(a)),
+            _ => Err("unsupported addressing mode")
         }
     }
-    fn write_memory(&mut self, _space: AddressSpace, _address: usize, _data: u8) {}
+    fn write_memory(&mut self, _address: Address, _data: u8) -> Result<(), &'static str> {
+        Err("unimplemented")
+    }
 }
 
-struct SelfProgramModule<A: Memory, B: Memory> {
+/*struct SelfProgramModule<A: Memory, B: Memory> {
     rom: Rc<A>,
     ram: Rc<B>,
 }
@@ -107,7 +200,7 @@ impl<A: Memory, B: Memory> Memory for SelfProgramModule<A, B> {
         }
     }
     fn write_memory(&mut self, _space: AddressSpace, _address: usize, _data: u8) {}
-}
+}*/
 
 enum ISA8051 {
     ACALL,
@@ -162,7 +255,7 @@ struct CPU8051 {}
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // load the application rom
     let rom_path = Path::new("rom.bin");
-    let rom = Rc::new(ROM::load_from_binary(rom_path)?);
+    let mut rom = Rc::new(ROM::load_from_binary(rom_path)?);
 
     // create a ram for the application
     let ram = Rc::new(RAM::create_with_size(8192));
@@ -170,8 +263,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // create the memory mapper
     let mut mmu = MemoryMapperModule::new(rom, ram);
 
-    println!("rom:0 = {:x}", mmu.read_memory(AddressSpace::Code, 0));
-    println!("ram:0 = {:x}", mmu.read_memory(AddressSpace::Data, 0));
+    println!("rom:0 = {:x}", mmu.read_memory(Address::Code(0u32))?);
+    println!("ram:0 = {:x}", mmu.read_memory(Address::ExternalData(0u32))?);
+    //println!("rom:0 = {:x}", Rc::get_mut(&mut rom).unwrap().read_memory(Address::Code(0))?);
 
     Ok(())
 }
