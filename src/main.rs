@@ -1540,6 +1540,9 @@ impl<A: Memory> CPU8051<A> {
                     ((next_program_counter >> 8) & 0xff) as u8,
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
+                if self.stack_pointer > self.stack_pointer + 2 {
+                    panic!("stack overflow in LCALL");
+                }
                 next_program_counter = address;
                 Ok(())
             }
@@ -1731,14 +1734,14 @@ impl Memory for RAM {
     }
 }
 
-struct MemoryMapperModule<A: Memory, B: Memory> {
+struct MemoryMapperModule<A: Memory, B: Memory, C: Memory> {
     rom: Rc<A>,
     iram: Rc<B>,
-    xram: Rc<B>,
+    xram: Rc<C>,
 }
 
-impl<A: Memory, B: Memory> MemoryMapperModule<A, B> {
-    fn new(rom: Rc<A>, iram: Rc<B>, xram: Rc<B>) -> MemoryMapperModule<A, B> {
+impl<A: Memory, B: Memory, C: Memory> MemoryMapperModule<A, B, C> {
+    fn new(rom: Rc<A>, iram: Rc<B>, xram: Rc<C>) -> MemoryMapperModule<A, B, C> {
         MemoryMapperModule {
             rom: rom,
             iram: iram,
@@ -1747,7 +1750,7 @@ impl<A: Memory, B: Memory> MemoryMapperModule<A, B> {
     }
 }
 
-impl<A: Memory, B: Memory> Memory for MemoryMapperModule<A, B> {
+impl<A: Memory, B: Memory, C: Memory> Memory for MemoryMapperModule<A, B, C> {
     fn read_memory(&mut self, address: Address) -> Result<u8, &'static str> {
         match address {
             Address::Code(a) => Rc::get_mut(&mut self.rom)
@@ -1775,30 +1778,53 @@ impl<A: Memory, B: Memory> Memory for MemoryMapperModule<A, B> {
     }
 }
 
-/*struct SelfProgramModule<A: Memory, B: Memory> {
-    rom: Rc<A>,
-    ram: Rc<B>,
+struct Peripherals<A: Memory> {
+    ram: Rc<A>
 }
 
-impl<A: Memory, B: Memory> SelfProgramModule<A, B> {
-    fn new(rom: Rc<A>, ram: Rc<B>) -> SelfProgramModule<A, B> {
-        SelfProgramModule { rom: rom, ram: ram }
-    }
-}
-
-impl<A: Memory, B: Memory> Memory for SelfProgramModule<A, B> {
-    fn read_memory(&mut self, space: AddressSpace, address: usize) -> u8 {
-        match space {
-            AddressSpace::Code => Rc::get_mut(&mut self.rom)
-                .unwrap()
-                .read_memory(AddressSpace::Data, address),
-            AddressSpace::Data => Rc::get_mut(&mut self.ram)
-                .unwrap()
-                .read_memory(AddressSpace::Data, address),
+impl<A: Memory> Peripherals<A> {
+    fn new(ram: Rc<A>) -> Peripherals<A> {
+        Peripherals {
+            ram: ram
         }
     }
-    fn write_memory(&mut self, _space: AddressSpace, _address: usize, _data: u8) {}
-}*/
+}
+
+impl<A: Memory> Memory for Peripherals<A> {
+    fn read_memory(&mut self, address: Address) -> Result<u8, &'static str> {
+        match address {
+            Address::ExternalData(a) => {
+                if a < 0x8000 {
+                    Rc::get_mut(&mut self.ram).unwrap().read_memory(address)
+                } else {
+                    match a {
+                        _ => Err("unused address (read)")
+                    }
+                }
+            }
+            _ => Err("unsupported address space")
+        }
+    }
+    fn write_memory(&mut self, address: Address, data: u8) -> Result<(), &'static str> {
+        match address {
+            Address::ExternalData(a) => {
+                if a < 0x8000 {
+                    Rc::get_mut(&mut self.ram).unwrap().write_memory(address, data)
+                } else {
+                    match a {
+                        0x9400 => {
+                            // uart channel b control
+                            println!("am85c30.channel.b.control = {:x}", data);
+                            Ok(())
+                        }
+                        _ => Err("unused address (write)")
+                    }
+                }
+            }
+            _ => Err("unsupported address space")
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // load the application rom
@@ -1808,9 +1834,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // create ram for the application
     let iram = Rc::new(RAM::create_with_size(128));
     let xram = Rc::new(RAM::create_with_size(32768));
+    let peripherals = Rc::new(Peripherals::new(xram));
 
     // create mapper
-    let mut mapper = Rc::new(MemoryMapperModule::new(rom, iram, xram));
+    let mut mapper = Rc::new(MemoryMapperModule::new(rom, iram, peripherals));
 
     // create the cpu
     let mut cpu = CPU8051::new(mapper);
