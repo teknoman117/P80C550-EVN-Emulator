@@ -92,8 +92,8 @@ enum ISA8051 {
     MUL,
     NOP,
     ORL(AddressingMode, AddressingMode),
-    POP(u8),
-    PUSH(u8),
+    POP(AddressingMode),
+    PUSH(AddressingMode),
     RET,
     RETI,
     RL,
@@ -101,7 +101,7 @@ enum ISA8051 {
     RR,
     RRC,
     SETB(AddressingMode),
-    SJMP(u8),
+    SJMP(i8),
     SUBB(AddressingMode),
     SWAP,
     XCH(AddressingMode),
@@ -174,7 +174,9 @@ impl<A: Memory> CPU8051<A> {
                         Ok(0)
                     }
                 } else {
-                    mem.read_memory(Address::Bit(bit))
+                    match bit {
+                        _ => mem.read_memory(Address::Bit(bit)),
+                    }
                 }
             }
             AddressingMode::Direct(address) => {
@@ -186,6 +188,7 @@ impl<A: Memory> CPU8051<A> {
                         0x81 => Ok(self.stack_pointer),
                         0x82 => Ok((self.data_pointer & 0xff) as u8),
                         0x83 => Ok(((self.data_pointer >> 8) & 0xff) as u8),
+                        0xE0 => Ok(self.accumulator),
                         _ => mem.read_memory(Address::SpecialFunctionRegister(address)),
                     }
                 }
@@ -272,7 +275,9 @@ impl<A: Memory> CPU8051<A> {
                     }
                     mem.write_memory(Address::InternalData(0x20 + (bit >> 3)), octet)
                 } else {
-                    mem.write_memory(Address::Bit(bit), 1)
+                    match bit {
+                        _ => mem.write_memory(Address::Bit(bit), 1),
+                    }
                 }
             }
             AddressingMode::Direct(address) => {
@@ -291,6 +296,10 @@ impl<A: Memory> CPU8051<A> {
                         }
                         0x83 => {
                             self.data_pointer = (self.data_pointer & 0x00ff) | ((data as u16) << 8);
+                            Ok(())
+                        }
+                        0xE0 => {
+                            self.accumulator = data;
                             Ok(())
                         }
                         _ => mem.write_memory(Address::SpecialFunctionRegister(address), data),
@@ -791,6 +800,14 @@ impl<A: Memory> CPU8051<A> {
                 ISA8051::INC(AddressingMode::Register(Register8051::DPTR)),
                 1,
             )),
+            // JNZ
+            0x70 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?
+                    as i8;
+                Ok((ISA8051::JNZ(arg1), 2))
+            }
             // JZ
             0x60 => {
                 let arg1 = Rc::get_mut(&mut self.memory)
@@ -1464,7 +1481,7 @@ impl<A: Memory> CPU8051<A> {
                 ))
             }
             // MOV iram addr, iram addr
-            0xF5 => {
+            0x85 => {
                 let arg1 = Rc::get_mut(&mut self.memory)
                     .unwrap()
                     .read_memory(Address::Code(self.program_counter + 1))?;
@@ -1534,6 +1551,8 @@ impl<A: Memory> CPU8051<A> {
                 ),
                 1,
             )),
+            // NOP
+            0x00 => Ok((ISA8051::NOP, 1)),
             // ORL iram addr, A
             0x42 => {
                 let arg1 = Rc::get_mut(&mut self.memory)
@@ -1695,8 +1714,20 @@ impl<A: Memory> CPU8051<A> {
                     2,
                 ))
             }*/
-            // NOP
-            0x00 => Ok((ISA8051::NOP, 1)),
+            // POP
+            0xD0 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::POP(AddressingMode::Direct(arg1)), 2))
+            }
+            // PUSH
+            0xC0 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::PUSH(AddressingMode::Direct(arg1)), 2))
+            }
             // RET
             0x22 => Ok((ISA8051::RET, 1)),
             // RETI
@@ -1709,6 +1740,14 @@ impl<A: Memory> CPU8051<A> {
                     .unwrap()
                     .read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::SETB(AddressingMode::Bit(arg1)), 2))
+            }
+            // SJMP reladdr
+            0x80 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?
+                    as i8;
+                Ok((ISA8051::SJMP(arg1), 2))
             }
             // catch unimplemented
             _ => {
@@ -1761,6 +1800,9 @@ impl<A: Memory> CPU8051<A> {
                 Ok(())
             }
             ISA8051::LCALL(address) => {
+                if self.stack_pointer >= 127 {
+                    panic!("stack overflow in LCALL");
+                }
                 let mut mem = Rc::get_mut(&mut self.memory).unwrap();
                 mem.write_memory(
                     Address::InternalData(self.stack_pointer + 1),
@@ -1771,9 +1813,6 @@ impl<A: Memory> CPU8051<A> {
                     ((next_program_counter >> 8) & 0xff) as u8,
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
-                if self.stack_pointer > self.stack_pointer + 2 {
-                    panic!("stack overflow in LCALL");
-                }
                 next_program_counter = address;
                 Ok(())
             }
@@ -1821,6 +1860,14 @@ impl<A: Memory> CPU8051<A> {
                 let data = self.load(operand1)? & self.load(operand2)?;
                 self.store(operand1, data)
             }
+            ISA8051::JNZ(address) => {
+                println!("accumulator = {}", self.accumulator);
+                if self.accumulator != 0 {
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
+            }
             ISA8051::JZ(address) => {
                 println!("accumulator = {}", self.accumulator);
                 if self.accumulator == 0 {
@@ -1845,6 +1892,22 @@ impl<A: Memory> CPU8051<A> {
                 let data = self.load(operand1)? | self.load(operand2)?;
                 self.store(operand1, data)
             }
+            ISA8051::POP(address) => {
+                let mut mem = Rc::get_mut(&mut self.memory).unwrap();
+                let data = mem.read_memory(Address::InternalData(self.stack_pointer))?;
+                self.stack_pointer = self.stack_pointer - 1;
+                self.store(address, data)
+            }
+            ISA8051::PUSH(address) => {
+                if self.stack_pointer >= 127 {
+                    panic!("stack overflow in PUSH");
+                }
+                let data = self.load(address)?;
+                let mut mem = Rc::get_mut(&mut self.memory).unwrap();
+                mem.write_memory(Address::InternalData(self.stack_pointer + 1), data)?;
+                self.stack_pointer = self.stack_pointer + 1;
+                Ok(())
+            }
             ISA8051::RET => {
                 let mut mem = Rc::get_mut(&mut self.memory).unwrap();
                 next_program_counter =
@@ -1866,6 +1929,10 @@ impl<A: Memory> CPU8051<A> {
                 Ok(())
             }
             ISA8051::SETB(address) => self.store(address, 1),
+            ISA8051::SJMP(offset) => {
+                next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
+                Ok(())
+            }
             ISA8051::LoadDptr(a) => {
                 self.data_pointer = a;
                 Ok(())
@@ -2127,6 +2194,14 @@ impl<A: Memory> Memory for Peripherals<A> {
                     Rc::get_mut(&mut self.ram).unwrap().read_memory(address)
                 } else {
                     match a {
+                        0x8400 => {
+                            println!("spi.data read");
+                            Ok((0xFF))
+                        }
+                        0x8401 => {
+                            println!("spi.control read");
+                            Ok((0x80))
+                        }
                         _ => Err("unused address (read)"),
                     }
                 }
@@ -2143,6 +2218,16 @@ impl<A: Memory> Memory for Peripherals<A> {
                         .write_memory(address, data)
                 } else {
                     match a {
+                        0x8400 => {
+                            // spi control
+                            println!("spi.data = {:x}", data);
+                            Ok(())
+                        }
+                        0x8401 => {
+                            // spi control
+                            println!("spi.control = {:x}", data);
+                            Ok(())
+                        }
                         0x9400 => {
                             // uart channel b control
                             println!("am85c30.channel.b.control = {:x}", data);
