@@ -514,6 +514,463 @@ impl<A: Memory> CPU8051<A> {
                 let pointer = ((arg2 as u16) << 8) | (arg1 as u16);
                 Ok((ISA8051::LoadDptr(pointer), 3))
             }
+            // MOV R0, #data
+            0x78 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R0),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R1, #data
+            0x79 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R1),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R2, #data
+            0x7A => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R2),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R3, #data
+            0x7B => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R3),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R4, #data
+            0x7C => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R4),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R5, #data
+            0x7D => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R5),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R6, #data
+            0x7E => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R6),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R7, #data
+            0x7F => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R7),
+                        AddressingMode::Immediate(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R0, A
+            0xF8 => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R0),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R1, A
+            0xF9 => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R1),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R2, A
+            0xFA => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R2),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R3, A
+            0xFB => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R3),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R4, A
+            0xFC => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R4),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R5, A
+            0xFD => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R5),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R6, A
+            0xFE => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R6),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R7, A
+            0xFF => Ok((
+                ISA8051::MOV(
+                    AddressingMode::Register(Register8051::R7),
+                    AddressingMode::Register(Register8051::A),
+                ),
+                1,
+            )),
+            // MOV R0, iram addr
+            0xA8 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R0),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R1, iram addr
+            0xA9 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R1),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R2, iram addr
+            0xAA => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R2),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R3, iram addr
+            0xAB => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R3),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R4, iram addr
+            0xAC => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R4),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R5, iram addr
+            0xAD => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R5),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R6, iram addr
+            0xAE => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R6),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV R7, iram addr
+            0xAF => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Register(Register8051::R7),
+                        AddressingMode::Direct(arg1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV bit addr, C
+            0x92 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Bit(arg1),
+                        AddressingMode::Register(Register8051::C),
+                    ),
+                    2,
+                ))
+            }
+            // MOV bit addr, C
+            0x75 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 2))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Immediate(arg2),
+                    ),
+                    3,
+                ))
+            }
+            // MOV iram addr, @R0
+            0x86 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Indirect(Register8051::R0),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, @R1
+            0x87 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Indirect(Register8051::R1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R0
+            0x88 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R0),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R1
+            0x89 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R1),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R2
+            0x8A => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R2),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R3
+            0x8B => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R3),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R4
+            0x8C => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R4),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R5
+            0x8D => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R5),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R6
+            0x8E => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R6),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, R7
+            0x8F => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::R7),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, A
+            0xF5 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::MOV(
+                        AddressingMode::Direct(arg1),
+                        AddressingMode::Register(Register8051::A),
+                    ),
+                    2,
+                ))
+            }
+            // MOV iram addr, iram addr
+            0xF5 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 2))?;
+                Ok((
+                    ISA8051::MOV(AddressingMode::Direct(arg1), AddressingMode::Direct(arg2)),
+                    3,
+                ))
+            }
             _ => Err("unimplemented instruction (decode)"),
         }
     }
