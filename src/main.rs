@@ -532,6 +532,40 @@ impl<A: Memory> CPU8051<A> {
                     2,
                 ))
             }
+            // INC A
+            0x04 => Ok((ISA8051::INC(AddressingMode::Register(Register8051::A)), 1)),
+            // INC iram addr
+            0x05 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::INC(AddressingMode::Direct(arg1)), 2))
+            }
+            // INC @R0
+            0x06 => Ok((ISA8051::INC(AddressingMode::Indirect(Register8051::R0)), 1)),
+            // INC @R1
+            0x07 => Ok((ISA8051::INC(AddressingMode::Indirect(Register8051::R1)), 1)),
+            // INC R0
+            0x08 => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R0)), 1)),
+            // INC R1
+            0x09 => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R1)), 1)),
+            // INC R2
+            0x0A => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R2)), 1)),
+            // INC R3
+            0x0B => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R3)), 1)),
+            // INC R4
+            0x0C => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R4)), 1)),
+            // INC R5
+            0x0D => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R5)), 1)),
+            // INC R6
+            0x0E => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R6)), 1)),
+            // INC R7
+            0x0F => Ok((ISA8051::INC(AddressingMode::Register(Register8051::R7)), 1)),
+            // INC DPTR
+            0xA3 => Ok((
+                ISA8051::INC(AddressingMode::Register(Register8051::DPTR)),
+                1,
+            )),
             // JZ
             0x60 => {
                 let arg1 = Rc::get_mut(&mut self.memory)
@@ -1462,6 +1496,15 @@ impl<A: Memory> CPU8051<A> {
                     next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
                 }
                 Ok(())
+            }
+            ISA8051::INC(address) => {
+                if let AddressingMode::Register(Register8051::DPTR) = address {
+                    self.data_pointer = self.data_pointer + 1;
+                    Ok(())
+                } else {
+                    let data = self.load(address)?;
+                    self.store(address, data + 1)
+                }
             }
             ISA8051::LJMP(address) => {
                 next_program_counter = address;
