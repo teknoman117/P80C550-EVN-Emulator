@@ -174,7 +174,7 @@ impl<A: Memory> CPU8051<A> {
                         Ok(0)
                     }
                 } else {
-                    Err("invalid bit address")
+                    mem.read_memory(Address::Bit(bit))
                 }
             }
             AddressingMode::Direct(address) => {
@@ -272,7 +272,7 @@ impl<A: Memory> CPU8051<A> {
                     }
                     mem.write_memory(Address::InternalData(0x20 + (bit >> 3)), octet)
                 } else {
-                    Err("invalid bit address")
+                    mem.write_memory(Address::Bit(bit), 1)
                 }
             }
             AddressingMode::Direct(address) => {
@@ -1701,6 +1701,15 @@ impl<A: Memory> CPU8051<A> {
             0x22 => Ok((ISA8051::RET, 1)),
             // RETI
             0x32 => Ok((ISA8051::RETI, 1)),
+            // SETB C
+            0xD3 => Ok((ISA8051::SETB(AddressingMode::Register(Register8051::C)), 1)),
+            // SETB bit addr
+            0xD2 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::SETB(AddressingMode::Bit(arg1)), 2))
+            }
             // catch unimplemented
             _ => {
                 println!("unknown opcode - 0x{:02x}", opcode);
@@ -1856,6 +1865,7 @@ impl<A: Memory> CPU8051<A> {
                 self.stack_pointer = self.stack_pointer - 2;
                 Ok(())
             }
+            ISA8051::SETB(address) => self.store(address, 1),
             ISA8051::LoadDptr(a) => {
                 self.data_pointer = a;
                 Ok(())
@@ -1956,23 +1966,39 @@ impl Memory for RAM {
     }
 }
 
-struct MemoryMapperModule<A: Memory, B: Memory, C: Memory> {
+struct P80C550<A: Memory, B: Memory, C: Memory> {
     rom: Rc<A>,
     iram: Rc<B>,
     xram: Rc<C>,
+
+    // 8051 peripherals
+    tcon: u8,
+    tmod: u8,
+    tl0: u8,
+    tl1: u8,
+    th0: u8,
+    th1: u8,
+    ie: u8,
 }
 
-impl<A: Memory, B: Memory, C: Memory> MemoryMapperModule<A, B, C> {
-    fn new(rom: Rc<A>, iram: Rc<B>, xram: Rc<C>) -> MemoryMapperModule<A, B, C> {
-        MemoryMapperModule {
+impl<A: Memory, B: Memory, C: Memory> P80C550<A, B, C> {
+    fn new(rom: Rc<A>, iram: Rc<B>, xram: Rc<C>) -> P80C550<A, B, C> {
+        P80C550 {
             rom: rom,
             iram: iram,
             xram: xram,
+            tcon: 0,
+            tmod: 0,
+            tl0: 0,
+            tl1: 0,
+            th0: 0,
+            th1: 0,
+            ie: 0,
         }
     }
 }
 
-impl<A: Memory, B: Memory, C: Memory> Memory for MemoryMapperModule<A, B, C> {
+impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
     fn read_memory(&mut self, address: Address) -> Result<u8, &'static str> {
         match address {
             Address::Code(a) => Rc::get_mut(&mut self.rom)
@@ -1984,6 +2010,36 @@ impl<A: Memory, B: Memory, C: Memory> Memory for MemoryMapperModule<A, B, C> {
             Address::ExternalData(a) => Rc::get_mut(&mut self.xram)
                 .unwrap()
                 .read_memory(Address::ExternalData(a)),
+            Address::Bit(bit) => {
+                // generally used for SFR bit access
+                match bit {
+                    0x88..=0x8F => {
+                        if (self.tcon >> (bit & 0x7)) != 0 {
+                            Ok(1)
+                        } else {
+                            Ok(0)
+                        }
+                    }
+                    0xA8..=0xAF => {
+                        if (self.ie >> (bit & 0x7)) != 0 {
+                            Ok(1)
+                        } else {
+                            Ok(0)
+                        }
+                    }
+                    _ => Err("non-existant bit address"),
+                }
+            }
+            Address::SpecialFunctionRegister(a) => match a {
+                0x88 => Ok(self.tcon),
+                0x89 => Ok(self.tmod),
+                0x8A => Ok(self.tl0),
+                0x8B => Ok(self.tl1),
+                0x8C => Ok(self.th0),
+                0x8D => Ok(self.th1),
+                0xA8 => Ok(self.ie),
+                _ => Err("non-existant SFR"),
+            },
             _ => Err("unsupported addressing mode for memory mapper (read)"),
         }
     }
@@ -1995,6 +2051,59 @@ impl<A: Memory, B: Memory, C: Memory> Memory for MemoryMapperModule<A, B, C> {
             Address::ExternalData(a) => Rc::get_mut(&mut self.xram)
                 .unwrap()
                 .write_memory(Address::ExternalData(a), data),
+            Address::Bit(bit) => {
+                // generally used for SFR bit access
+                match bit {
+                    0x88..=0x8F => {
+                        if data != 0 {
+                            self.tcon |= (1 << (bit & 0x7));
+                        } else {
+                            self.tcon &= !(1 << (bit & 0x07));
+                        }
+                        Ok(())
+                    }
+                    0xA8..=0xAF => {
+                        if data != 0 {
+                            self.ie |= (1 << (bit & 0x7));
+                        } else {
+                            self.ie &= !(1 << (bit & 0x07));
+                        }
+                        Ok(())
+                    }
+                    _ => Err("non-existant bit address"),
+                }
+            }
+            Address::SpecialFunctionRegister(a) => match a {
+                0x88 => {
+                    self.tcon = data;
+                    Ok(())
+                }
+                0x89 => {
+                    self.tmod = data;
+                    Ok(())
+                }
+                0x8a => {
+                    self.tl0 = data;
+                    Ok(())
+                }
+                0x8b => {
+                    self.tl1 = data;
+                    Ok(())
+                }
+                0x8c => {
+                    self.th0 = data;
+                    Ok(())
+                }
+                0x8d => {
+                    self.th1 = data;
+                    Ok(())
+                }
+                0xa8 => {
+                    self.ie = data;
+                    Ok(())
+                }
+                _ => Err("non-existant SFR"),
+            },
             _ => Err("unsupported addressing mode for memory mapper (write)"),
         }
     }
@@ -2059,7 +2168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let peripherals = Rc::new(Peripherals::new(xram));
 
     // create mapper
-    let mut mapper = Rc::new(MemoryMapperModule::new(rom, iram, peripherals));
+    let mut mapper = Rc::new(P80C550::new(rom, iram, peripherals));
 
     // create the cpu
     let mut cpu = CPU8051::new(mapper);
