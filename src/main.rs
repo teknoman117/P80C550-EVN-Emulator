@@ -65,22 +65,22 @@ enum ISA8051 {
     ADDC(AddressingMode),
     AJMP(u16),
     ANL(AddressingMode, AddressingMode),
-    CJNE(AddressingMode, AddressingMode, u8),
+    CJNE(AddressingMode, AddressingMode, i8),
     CLR(AddressingMode),
     CPL(AddressingMode),
     DA,
     DEC(AddressingMode),
     DIV,
-    DJNZ(AddressingMode, u8),
+    DJNZ(AddressingMode, i8),
     INC(AddressingMode),
-    JB(u8, u8),
-    JBC(u8, u8),
-    JC(u8),
+    JB(u8, i8),
+    JBC(u8, i8),
+    JC(i8),
     JMP,
-    JNB(u8, u8),
-    JNC(u8),
-    JNZ(u8),
-    JZ(u8),
+    JNB(u8, i8),
+    JNC(i8),
+    JNZ(i8),
+    JZ(i8),
     LCALL(u16),
     LJMP(u16),
     LoadDptr(u16),
@@ -116,6 +116,8 @@ trait Memory {
 struct CPU8051<A: Memory> {
     bank: u8,
     carry_flag: u8,
+    auxillary_carry_flag: u8,
+    overflow_flag: u8,
     accumulator: u8,
     data_pointer: u16,
     program_counter: u16,
@@ -127,6 +129,8 @@ impl<A: Memory> CPU8051<A> {
         CPU8051 {
             bank: 0,
             carry_flag: 0,
+            auxillary_carry_flag: 0,
+            overflow_flag: 0,
             accumulator: 0,
             data_pointer: 0,
             program_counter: 0,
@@ -315,6 +319,93 @@ impl<A: Memory> CPU8051<A> {
                     .read_memory(Address::Code(self.program_counter + 2))?;
                 let address = ((arg2 as u16) << 8) | (arg1 as u16);
                 Ok((ISA8051::LJMP(address), 3))
+            }
+            // ADD A, #data
+            0x24 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::ADD(AddressingMode::Immediate(arg1)),
+                    2,
+                ))
+            }
+            // ADD A, iram addr
+            0x25 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::ADD(AddressingMode::Direct(arg1)),
+                    2,
+                ))
+            }
+            // ADD A, @R0
+            0x26 => Ok((ISA8051::ADD(AddressingMode::Indirect(Register8051::R0)), 1)),
+            // ADD A, @R1
+            0x27 => Ok((ISA8051::ADD(AddressingMode::Indirect(Register8051::R1)), 1)),
+            // ADD A, R0
+            0x28 => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R0)), 1)),
+            // ADD A, R1
+            0x29 => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R1)), 1)),
+            // ADD A, R2
+            0x2A => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R2)), 1)),
+            // ADD A, R3
+            0x2B => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R3)), 1)),
+            // ADD A, R4
+            0x2C => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R4)), 1)),
+            // ADD A, R5
+            0x2D => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R5)), 1)),
+            // ADD A, R6
+            0x2E => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R6)), 1)),
+            // ADD A, R7
+            0x2F => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R7)), 1)),
+            // ADDC A, #data
+            0x34 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::ADDC(AddressingMode::Immediate(arg1)),
+                    2,
+                ))
+            }
+            // ADDC A, iram addr
+            0x35 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((
+                    ISA8051::ADDC(AddressingMode::Direct(arg1)),
+                    2,
+                ))
+            }
+            // ADDC A, @R0
+            0x36 => Ok((ISA8051::ADDC(AddressingMode::Indirect(Register8051::R0)), 1)),
+            // ADDC A, @R1
+            0x37 => Ok((ISA8051::ADDC(AddressingMode::Indirect(Register8051::R1)), 1)),
+            // ADDC A, R0
+            0x38 => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R0)), 1)),
+            // ADDC A, R1
+            0x39 => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R1)), 1)),
+            // ADDC A, R2
+            0x3A => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R2)), 1)),
+            // ADDC A, R3
+            0x3B => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R3)), 1)),
+            // ADDC A, R4
+            0x3C => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R4)), 1)),
+            // ADDC A, R5
+            0x3D => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R5)), 1)),
+            // ADDC A, R6
+            0x3E => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R6)), 1)),
+            // ADDC A, R7
+            0x3F => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R7)), 1)),
+            // JZ
+            0x60 => {
+                let arg1 = Rc::get_mut(&mut self.memory)
+                    .unwrap()
+                    .read_memory(Address::Code(self.program_counter + 1))? as i8;
+                Ok((ISA8051::JZ(arg1), 2))
             }
             // MOV @R0, #data
             0x76 => {
@@ -991,9 +1082,54 @@ impl<A: Memory> CPU8051<A> {
                 next_program_counter = address;
                 Ok(())
             }
+            ISA8051::ADD(operand2) => {
+                let data = self.load(operand2)?;
+                let result: u16 = (self.accumulator as u16) + (data as u16);
+                let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf);
+                self.accumulator = (result & 0xff) as u8;
+
+                // flags
+                if result > 255 {
+                    self.carry_flag = 1;
+                } else {
+                    self.carry_flag = 0;
+                }
+                if half_result > 16 {
+                    self.auxillary_carry_flag = 1;
+                } else {
+                    self.auxillary_carry_flag = 0;
+                }
+                Ok(())
+            }
+            ISA8051::ADDC(operand2) => {
+                let data = self.load(operand2)?;
+                let result: u16 = (self.accumulator as u16) + (data as u16) + (self.carry_flag as u16);
+                let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf) + (self.carry_flag & 0x1);
+                self.accumulator = (result & 0xff) as u8;
+
+                // flags
+                if result > 255 {
+                    self.carry_flag = 1;
+                } else {
+                    self.carry_flag = 0;
+                }
+                if half_result > 16 {
+                    self.auxillary_carry_flag = 1;
+                } else {
+                    self.auxillary_carry_flag = 0;
+                }
+                Ok(())
+            }
             ISA8051::ANL(operand1, operand2) => {
                 let data = self.load(operand1)? & self.load(operand2)?;
                 self.store(operand1, data)
+            }
+            ISA8051::JZ(address) => {
+                println!("accumulator = {}", self.accumulator);
+                if self.accumulator == 0 {
+                    next_program_counter = ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
             }
             ISA8051::MOV(operand1, operand2) => {
                 let data = self.load(operand2)?;
