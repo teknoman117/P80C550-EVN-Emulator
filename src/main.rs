@@ -123,6 +123,7 @@ struct CPU8051<A: Memory> {
     auxillary_carry_flag: u8,
     overflow_flag: u8,
     accumulator: u8,
+    b_register: u8,
     stack_pointer: u8,
     data_pointer: u16,
     program_counter: u16,
@@ -137,6 +138,7 @@ impl<A: Memory> CPU8051<A> {
             auxillary_carry_flag: 0,
             overflow_flag: 0,
             accumulator: 0,
+            b_register: 0,
             stack_pointer: 0,
             data_pointer: 0,
             program_counter: 0,
@@ -193,6 +195,7 @@ impl<A: Memory> CPU8051<A> {
                 } else {
                     match bit {
                         0xE0..=0xE7 => Ok((self.accumulator >> (bit & 0x7)) & 0x1),
+                        0xF0..=0xF7 => Ok((self.b_register >> (bit & 0x7)) & 0x1),
                         _ => mem.read_memory(Address::Bit(bit)),
                     }
                 }
@@ -215,6 +218,7 @@ impl<A: Memory> CPU8051<A> {
                         0x82 => Ok((self.data_pointer & 0xff) as u8),
                         0x83 => Ok(((self.data_pointer >> 8) & 0xff) as u8),
                         0xE0 => Ok(self.accumulator),
+                        0xF0 => Ok(self.b_register),
                         _ => mem.read_memory(Address::SpecialFunctionRegister(address)),
                     }
                 }
@@ -326,6 +330,10 @@ impl<A: Memory> CPU8051<A> {
                         }
                         0xE0 => {
                             self.accumulator = data;
+                            Ok(())
+                        }
+                        0xF0 => {
+                            self.b_register = data;
                             Ok(())
                         }
                         _ => mem.write_memory(Address::SpecialFunctionRegister(address), data),
