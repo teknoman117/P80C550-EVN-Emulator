@@ -367,7 +367,7 @@ impl<A: Memory> CPU8051<A> {
             // NOP
             0x00 => Ok((ISA8051::NOP, 1)),
             // AJMP #address
-            0x01 => {
+            0x01 | 0x21 | 0x41 | 0x61 | 0x81 | 0xA1 | 0xC1 | 0xE1 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
                 Ok((ISA8051::AJMP(address), 2))
@@ -397,6 +397,12 @@ impl<A: Memory> CPU8051<A> {
                 ))),
                 1,
             )),
+            // ACALL #address
+            0x11 | 0x31 | 0x51 | 0x71 | 0x91 | 0xB1 | 0xD1 | 0xF1  => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
+                Ok((ISA8051::ACALL(address), 2))
+            }
             // LCALL #address
             0x12 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
@@ -917,12 +923,6 @@ impl<A: Memory> CPU8051<A> {
                 ),
                 1,
             )),
-            // ACALL addr
-            0xF1 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
-                Ok((ISA8051::ACALL(address), 2))
-            }
             // MOVX @R0, A
             0xF2 => Ok((
                 ISA8051::MOVX(
@@ -997,7 +997,10 @@ impl<A: Memory> CPU8051<A> {
                 Ok(())
             }
             ISA8051::CJNE(operand1, operand2, offset) => {
-                if self.load(operand1)? != self.load(operand2)? {
+                let operand1 = self.load(operand1)?;
+                let operand2 = self.load(operand2)?;
+                self.carry_flag = if operand1 < operand2 { 1 } else { 0 };
+                if operand1 != operand2 {
                     next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
                 }
                 Ok(())
