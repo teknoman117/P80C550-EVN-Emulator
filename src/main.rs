@@ -3,7 +3,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 mod mcs51;
-use mcs51::{Address, CPU8051, Memory};
+use mcs51::{Address, Memory, CPU};
 
 struct ROM {
     data: Vec<u8>,
@@ -316,7 +316,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mapper = Rc::new(P80C550::new(rom, iram, peripherals));
 
     // create the cpu
-    let mut cpu = CPU8051::new(mapper);
+    let mut cpu = CPU::new(mapper);
     loop {
         cpu.step()?;
     }
