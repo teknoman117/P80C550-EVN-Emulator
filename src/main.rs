@@ -406,7 +406,7 @@ impl<A: Memory> CPU8051<A> {
                 1,
             )),
             // ACALL #address
-            0x11 | 0x31 | 0x51 | 0x71 | 0x91 | 0xB1 | 0xD1 | 0xF1  => {
+            0x11 | 0x31 | 0x51 | 0x71 | 0x91 | 0xB1 | 0xD1 | 0xF1 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
                 Ok((ISA8051::ACALL(address), 2))
@@ -430,7 +430,12 @@ impl<A: Memory> CPU8051<A> {
             // DEC @R1
             0x17 => Ok((ISA8051::DEC(AddressingMode::Indirect(Register8051::R1)), 1)),
             // DEC Rx
-            0x18..=0x1F => Ok((ISA8051::DEC(AddressingMode::Register(CPU8051::<A>::register_from_id(opcode))), 1)),
+            0x18..=0x1F => Ok((
+                ISA8051::DEC(AddressingMode::Register(CPU8051::<A>::register_from_id(
+                    opcode,
+                ))),
+                1,
+            )),
             // RET
             0x22 => Ok((ISA8051::RET, 1)),
             // ADD A, #data
@@ -486,7 +491,7 @@ impl<A: Memory> CPU8051<A> {
             // JC reladdr
             0x40 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((ISA8051::JC(arg1), 2))                
+                Ok((ISA8051::JC(arg1), 2))
             }
             // ORL iram addr, A
             0x42 => {
@@ -560,7 +565,7 @@ impl<A: Memory> CPU8051<A> {
             // JNC reladdr
             0x50 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((ISA8051::JNC(arg1), 2))                
+                Ok((ISA8051::JNC(arg1), 2))
             }
             // ANL iram addr, A
             0x52 => {
@@ -1032,6 +1037,7 @@ impl<A: Memory> CPU8051<A> {
                 let data = self.load(operand2)?;
                 let result: u16 = (self.accumulator as u16) + (data as u16);
                 let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf);
+                let signed_result: u8 = (self.accumulator & 0x7f) + (data & 0x7f);
                 self.accumulator = (result & 0xff) as u8;
 
                 // flags
@@ -1044,6 +1050,15 @@ impl<A: Memory> CPU8051<A> {
                     self.auxillary_carry_flag = 1;
                 } else {
                     self.auxillary_carry_flag = 0;
+                }
+                if signed_result > 127 {
+                    if self.carry_flag == 1 {
+                        self.overflow_flag = 0;
+                    } else {
+                        self.overflow_flag = 1;
+                    }
+                } else {
+                    self.overflow_flag = self.carry_flag;
                 }
                 Ok(())
             }
@@ -1053,6 +1068,8 @@ impl<A: Memory> CPU8051<A> {
                     (self.accumulator as u16) + (data as u16) + (self.carry_flag as u16);
                 let half_result: u8 =
                     (self.accumulator & 0xf) + (data & 0xf) + (self.carry_flag & 0x1);
+                let signed_result: u8 =
+                    (self.accumulator & 0x7f) + (data & 0x7f) + (self.carry_flag & 0x1);
                 self.accumulator = (result & 0xff) as u8;
 
                 // flags
@@ -1065,6 +1082,15 @@ impl<A: Memory> CPU8051<A> {
                     self.auxillary_carry_flag = 1;
                 } else {
                     self.auxillary_carry_flag = 0;
+                }
+                if signed_result > 127 {
+                    if self.carry_flag == 1 {
+                        self.overflow_flag = 0;
+                    } else {
+                        self.overflow_flag = 1;
+                    }
+                } else {
+                    self.overflow_flag = self.carry_flag;
                 }
                 Ok(())
             }
