@@ -265,6 +265,8 @@ impl<A: Memory> CPU<A> {
     fn decode_next_instruction(&mut self) -> Result<(Instruction, u16), &'static str> {
         let mem = Rc::get_mut(&mut self.memory).unwrap();
         let opcode = mem.read_memory(Address::Code(self.program_counter))?;
+        let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+        let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
 
         // decode instruction
         match opcode {
@@ -272,24 +274,18 @@ impl<A: Memory> CPU<A> {
             0x00 => Ok((Instruction::NOP, 1)),
             // AJMP #address
             0x01 | 0x21 | 0x41 | 0x61 | 0x81 | 0xA1 | 0xC1 | 0xE1 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
                 Ok((Instruction::AJMP(address), 2))
             }
             // LJMP #address
             0x02 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let address = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((Instruction::LJMP(address), 3))
             }
             // INC A
             0x04 => Ok((Instruction::INC(AddressingMode::Register(Register::A)), 1)),
             // INC iram addr
-            0x05 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::INC(AddressingMode::Direct(arg1)), 2))
-            }
+            0x05 => Ok((Instruction::INC(AddressingMode::Direct(arg1)), 2)),
             // INC @R0
             0x06 => Ok((Instruction::INC(AddressingMode::Indirect(Register::R0)), 1)),
             // INC @R1
@@ -301,24 +297,18 @@ impl<A: Memory> CPU<A> {
             )),
             // ACALL #address
             0x11 | 0x31 | 0x51 | 0x71 | 0x91 | 0xB1 | 0xD1 | 0xF1 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
                 Ok((Instruction::ACALL(address), 2))
             }
             // LCALL #address
             0x12 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let address = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((Instruction::LCALL(address), 3))
             }
             // DEC A
             0x14 => Ok((Instruction::DEC(AddressingMode::Register(Register::A)), 1)),
             // DEC iram addr
-            0x15 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::DEC(AddressingMode::Direct(arg1)), 2))
-            }
+            0x15 => Ok((Instruction::DEC(AddressingMode::Direct(arg1)), 2)),
             // DEC @R0
             0x16 => Ok((Instruction::DEC(AddressingMode::Indirect(Register::R0)), 1)),
             // DEC @R1
@@ -331,15 +321,9 @@ impl<A: Memory> CPU<A> {
             // RET
             0x22 => Ok((Instruction::RET, 1)),
             // ADD A, #data
-            0x24 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::ADD(AddressingMode::Immediate(arg1)), 2))
-            }
+            0x24 => Ok((Instruction::ADD(AddressingMode::Immediate(arg1)), 2)),
             // ADD A, iram addr
-            0x25 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::ADD(AddressingMode::Direct(arg1)), 2))
-            }
+            0x25 => Ok((Instruction::ADD(AddressingMode::Direct(arg1)), 2)),
             // ADD A, @R0
             0x26 => Ok((Instruction::ADD(AddressingMode::Indirect(Register::R0)), 1)),
             // ADD A, @R1
@@ -350,23 +334,13 @@ impl<A: Memory> CPU<A> {
                 1,
             )),
             // JNB bit addr, reladdr
-            0x30 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((Instruction::JNB(AddressingMode::Bit(arg1), arg2), 3))
-            }
+            0x30 => Ok((Instruction::JNB(AddressingMode::Bit(arg1), arg2 as i8), 3)),
             // RETI
             0x32 => Ok((Instruction::RETI, 1)),
             // ADDC A, #data
-            0x34 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::ADDC(AddressingMode::Immediate(arg1)), 2))
-            }
+            0x34 => Ok((Instruction::ADDC(AddressingMode::Immediate(arg1)), 2)),
             // ADDC A, iram addr
-            0x35 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::ADDC(AddressingMode::Direct(arg1)), 2))
-            }
+            0x35 => Ok((Instruction::ADDC(AddressingMode::Direct(arg1)), 2)),
             // ADDC A, @R0
             0x36 => Ok((Instruction::ADDC(AddressingMode::Indirect(Register::R0)), 1)),
             // ADDC A, @R1
@@ -377,55 +351,39 @@ impl<A: Memory> CPU<A> {
                 1,
             )),
             // JC reladdr
-            0x40 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((Instruction::JC(arg1), 2))
-            }
+            0x40 => Ok((Instruction::JC(arg1 as i8), 2)),
             // ORL iram addr, A
-            0x42 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Register(Register::A),
-                    ),
-                    2,
-                ))
-            }
+            0x42 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Register(Register::A),
+                ),
+                2,
+            )),
             // ORL iram addr, #data
-            0x43 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Immediate(arg2),
-                    ),
-                    3,
-                ))
-            }
+            0x43 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Immediate(arg2),
+                ),
+                3,
+            )),
             // ORL A, #data
-            0x44 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Immediate(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x44 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
             // ORL A, iram addr
-            0x45 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Direct(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x45 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
             // ORL A, @R0
             0x46 => Ok((
                 Instruction::ORL(
@@ -451,183 +409,181 @@ impl<A: Memory> CPU<A> {
                 1,
             )),
             // JNC reladdr
-            0x50 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((Instruction::JNC(arg1), 2))
-            }
+            0x50 => Ok((Instruction::JNC(arg1 as i8), 2)),
             // ANL iram addr, A
-            0x52 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ANL(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Register(Register::A),
-                    ),
-                    2,
-                ))
-            }
+            0x52 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Register(Register::A),
+                ),
+                2,
+            )),
+            // ANL iram addr, #data
+            0x53 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Immediate(arg2),
+                ),
+                3,
+            )),
+            // ANL A, #data
+            0x54 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
+            // ANL A, iram addr
+            0x55 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
+            // ANL A, @R0
+            0x56 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Indirect(Register::R0),
+                ),
+                1,
+            )),
+            // ANL A, @R1
+            0x57 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Indirect(Register::R1),
+                ),
+                1,
+            )),
+            // ANL A, @R0
+            0x58..=0x5F => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                ),
+                1,
+            )),
             // JZ
-            0x60 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((Instruction::JZ(arg1), 2))
-            }
+            0x60 => Ok((Instruction::JZ(arg1 as i8), 2)),
             // JNZ
-            0x70 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((Instruction::JNZ(arg1), 2))
-            }
+            0x70 => Ok((Instruction::JNZ(arg1 as i8), 2)),
             // ORL C, bit addr
-            0x72 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Register(Register::C),
-                        AddressingMode::Bit(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x72 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Register(Register::C),
+                    AddressingMode::Bit(arg1),
+                ),
+                2,
+            )),
             // MOV A, #data
-            0x74 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Immediate(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x74 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
             // MOV bit addr, C
-            0x75 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Immediate(arg2),
-                    ),
-                    3,
-                ))
-            }
+            0x75 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Immediate(arg2),
+                ),
+                3,
+            )),
             // MOV @R0, #data
-            0x76 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Indirect(Register::R0),
-                        AddressingMode::Immediate(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x76 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Indirect(Register::R0),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
             // MOV @R1, #data
-            0x77 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Indirect(Register::R1),
-                        AddressingMode::Immediate(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x77 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Indirect(Register::R1),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
             // MOV Rx, #data
-            0x78..=0x7F => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Register(register_from_opcode(opcode)),
-                        AddressingMode::Immediate(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0x78..=0x7F => Ok((
+                Instruction::MOV(
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                    AddressingMode::Immediate(arg1),
+                ),
+                2,
+            )),
             // SJMP reladdr
-            0x80 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((Instruction::SJMP(arg1), 2))
-            }
+            0x80 => Ok((Instruction::SJMP(arg1 as i8), 2)),
+            // ANL C, bit addr
+            0x82 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::C),
+                    AddressingMode::Bit(arg1),
+                ),
+                2,
+            )),
             // MOVC A, @A+DPTR
             0x83 => Ok((
                 Instruction::MOVC(AddressingMode::IndirectCode(Register::PC)),
                 1,
             )),
             // MOV iram addr, iram addr
-            0x85 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
-                Ok((
-                    Instruction::MOV(AddressingMode::Direct(arg2), AddressingMode::Direct(arg1)),
-                    3,
-                ))
-            }
+            0x85 => Ok((
+                Instruction::MOV(AddressingMode::Direct(arg2), AddressingMode::Direct(arg1)),
+                3,
+            )),
             // MOV iram addr, @R0
-            0x86 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Indirect(Register::R0),
-                    ),
-                    2,
-                ))
-            }
+            0x86 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Indirect(Register::R0),
+                ),
+                2,
+            )),
             // MOV iram addr, @R1
-            0x87 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Indirect(Register::R1),
-                    ),
-                    2,
-                ))
-            }
+            0x87 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Indirect(Register::R1),
+                ),
+                2,
+            )),
             // MOV iram addr, Rx
-            0x88..=0x8F => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Register(register_from_opcode(opcode)),
-                    ),
-                    2,
-                ))
-            }
+            0x88..=0x8F => Ok((
+                Instruction::MOV(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                ),
+                2,
+            )),
             // MOV DPTR, #data16
             0x90 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let pointer = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((Instruction::LoadDptr(pointer), 3))
             }
             // MOV bit addr, C
-            0x92 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Bit(arg1),
-                        AddressingMode::Register(Register::C),
-                    ),
-                    2,
-                ))
-            }
+            0x92 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Bit(arg1),
+                    AddressingMode::Register(Register::C),
+                ),
+                2,
+            )),
             // MOVC A, @A+DPTR
             0x93 => Ok((
                 Instruction::MOVC(AddressingMode::IndirectCode(Register::DPTR)),
                 1,
             )),
             // SUBB A, #data
-            0x94 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::SUBB(AddressingMode::Immediate(arg1)), 2))
-            }
+            0x94 => Ok((Instruction::SUBB(AddressingMode::Immediate(arg1)), 2)),
             // SUBB A, iram addr
-            0x95 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::SUBB(AddressingMode::Direct(arg1)), 2))
-            }
+            0x95 => Ok((Instruction::SUBB(AddressingMode::Direct(arg1)), 2)),
             // SUBB A, @R0
             0x96 => Ok((Instruction::SUBB(AddressingMode::Indirect(Register::R0)), 1)),
             // SUBB A, @R0
@@ -638,168 +594,128 @@ impl<A: Memory> CPU<A> {
                 1,
             )),
             // ORL C, /bit addr (C <- C or NOT bit)
-            0xA0 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::ORL(
-                        AddressingMode::Register(Register::C),
-                        AddressingMode::NotBit(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xA0 => Ok((
+                Instruction::ORL(
+                    AddressingMode::Register(Register::C),
+                    AddressingMode::NotBit(arg1),
+                ),
+                2,
+            )),
             // MOV C, bit addr
-            0xA2 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Register(Register::C),
-                        AddressingMode::Bit(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xA2 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Register(Register::C),
+                    AddressingMode::Bit(arg1),
+                ),
+                2,
+            )),
             // INC DPTR
             0xA3 => Ok((
                 Instruction::INC(AddressingMode::Register(Register::DPTR)),
                 1,
             )),
             // MOV @R0, iram addr
-            0xA6 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Indirect(Register::R0),
-                        AddressingMode::Direct(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xA6 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Indirect(Register::R0),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
             // MOV @R1, iram addr
-            0xA7 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Indirect(Register::R1),
-                        AddressingMode::Direct(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xA7 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Indirect(Register::R1),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
             // MOV Rx, iram addr
-            0xA8..=0xAF => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Register(register_from_opcode(opcode)),
-                        AddressingMode::Direct(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xA8..=0xAF => Ok((
+                Instruction::MOV(
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
+            // ANL C, /bit addr
+            0xB0 => Ok((
+                Instruction::ANL(
+                    AddressingMode::Register(Register::C),
+                    AddressingMode::NotBit(arg1),
+                ),
+                2,
+            )),
             // CJNE A, #data, reladdr
-            0xB4 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((
-                    Instruction::CJNE(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Immediate(arg1),
-                        arg2,
-                    ),
-                    3,
-                ))
-            }
+            0xB4 => Ok((
+                Instruction::CJNE(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Immediate(arg1),
+                    arg2 as i8,
+                ),
+                3,
+            )),
             // CJNE A, iram addr, reladdr
-            0xB5 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((
-                    Instruction::CJNE(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Direct(arg1),
-                        arg2,
-                    ),
-                    3,
-                ))
-            }
+            0xB5 => Ok((
+                Instruction::CJNE(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Direct(arg1),
+                    arg2 as i8,
+                ),
+                3,
+            )),
             // CJNE @R0, #data, reladdr
-            0xB6 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((
-                    Instruction::CJNE(
-                        AddressingMode::Indirect(Register::R0),
-                        AddressingMode::Immediate(arg1),
-                        arg2,
-                    ),
-                    3,
-                ))
-            }
+            0xB6 => Ok((
+                Instruction::CJNE(
+                    AddressingMode::Indirect(Register::R0),
+                    AddressingMode::Immediate(arg1),
+                    arg2 as i8,
+                ),
+                3,
+            )),
             // CJNE @R1, #data, reladdr
-            0xB7 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((
-                    Instruction::CJNE(
-                        AddressingMode::Indirect(Register::R1),
-                        AddressingMode::Immediate(arg1),
-                        arg2,
-                    ),
-                    3,
-                ))
-            }
+            0xB7 => Ok((
+                Instruction::CJNE(
+                    AddressingMode::Indirect(Register::R1),
+                    AddressingMode::Immediate(arg1),
+                    arg2 as i8,
+                ),
+                3,
+            )),
             // CJNE Rx, #data, reladdr
-            0xB8..=0xBF => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((
-                    Instruction::CJNE(
-                        AddressingMode::Register(register_from_opcode(opcode)),
-                        AddressingMode::Immediate(arg1),
-                        arg2,
-                    ),
-                    3,
-                ))
-            }
+            0xB8..=0xBF => Ok((
+                Instruction::CJNE(
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                    AddressingMode::Immediate(arg1),
+                    arg2 as i8,
+                ),
+                3,
+            )),
             // PUSH
-            0xC0 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::PUSH(AddressingMode::Direct(arg1)), 2))
-            }
+            0xC0 => Ok((Instruction::PUSH(AddressingMode::Direct(arg1)), 2)),
             // CLR bit addr
-            0xC2 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::CLR(AddressingMode::Bit(arg1)), 2))
-            }
+            0xC2 => Ok((Instruction::CLR(AddressingMode::Bit(arg1)), 2)),
             // CLR C
             0xC3 => Ok((Instruction::CLR(AddressingMode::Register(Register::C)), 1)),
             // POP
-            0xD0 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::POP(AddressingMode::Direct(arg1)), 2))
-            }
+            0xD0 => Ok((Instruction::POP(AddressingMode::Direct(arg1)), 2)),
             // SETB bit addr
-            0xD2 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((Instruction::SETB(AddressingMode::Bit(arg1)), 2))
-            }
+            0xD2 => Ok((Instruction::SETB(AddressingMode::Bit(arg1)), 2)),
             // SETB C
             0xD3 => Ok((Instruction::SETB(AddressingMode::Register(Register::C)), 1)),
             // DJNZ iram addr, reladdr
-            0xD5 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
-                Ok((Instruction::DJNZ(AddressingMode::Direct(arg1), arg2), 3))
-            }
+            0xD5 => Ok((
+                Instruction::DJNZ(AddressingMode::Direct(arg1), arg2 as i8),
+                3,
+            )),
             // DJNZ Rx, reladdr
-            0xD8..=0xDF => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
-                Ok((
-                    Instruction::DJNZ(AddressingMode::Register(register_from_opcode(opcode)), arg1),
-                    2,
-                ))
-            }
+            0xD8..=0xDF => Ok((
+                Instruction::DJNZ(
+                    AddressingMode::Register(register_from_opcode(opcode)),
+                    arg1 as i8,
+                ),
+                2,
+            )),
             // MOVX A, @DPTR
             0xE0 => Ok((
                 Instruction::MOVX(
@@ -827,16 +743,13 @@ impl<A: Memory> CPU<A> {
             // CLR A
             0xE4 => Ok((Instruction::CLR(AddressingMode::Register(Register::A)), 1)),
             // MOV A, iram addr
-            0xE5 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Register(Register::A),
-                        AddressingMode::Direct(arg1),
-                    ),
-                    2,
-                ))
-            }
+            0xE5 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Register(Register::A),
+                    AddressingMode::Direct(arg1),
+                ),
+                2,
+            )),
             // MOV A, @R0
             0xE6 => Ok((
                 Instruction::MOV(
@@ -888,16 +801,13 @@ impl<A: Memory> CPU<A> {
             // CPL A
             0xF4 => Ok((Instruction::CPL(AddressingMode::Register(Register::A)), 1)),
             // MOV iram addr, A
-            0xF5 => {
-                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
-                Ok((
-                    Instruction::MOV(
-                        AddressingMode::Direct(arg1),
-                        AddressingMode::Register(Register::A),
-                    ),
-                    2,
-                ))
-            }
+            0xF5 => Ok((
+                Instruction::MOV(
+                    AddressingMode::Direct(arg1),
+                    AddressingMode::Register(Register::A),
+                ),
+                2,
+            )),
             // MOV @R0, A
             0xF6 => Ok((
                 Instruction::MOV(

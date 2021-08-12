@@ -3,7 +3,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 mod mcs51;
-use mcs51::{Address, Memory, cpu::CPU};
+use mcs51::{cpu::CPU, Address, Memory};
 
 struct ROM {
     data: Vec<u8>,
