@@ -418,6 +418,19 @@ impl<A: Memory> CPU8051<A> {
                 let address = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((ISA8051::LCALL(address), 3))
             }
+            // DEC A
+            0x14 => Ok((ISA8051::DEC(AddressingMode::Register(Register8051::A)), 1)),
+            // DEC iram addr
+            0x15 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::DEC(AddressingMode::Direct(arg1)), 2))
+            }
+            // DEC @R0
+            0x16 => Ok((ISA8051::DEC(AddressingMode::Indirect(Register8051::R0)), 1)),
+            // DEC @R1
+            0x17 => Ok((ISA8051::DEC(AddressingMode::Indirect(Register8051::R1)), 1)),
+            // DEC Rx
+            0x18..=0x1F => Ok((ISA8051::DEC(AddressingMode::Register(CPU8051::<A>::register_from_id(opcode))), 1)),
             // RET
             0x22 => Ok((ISA8051::RET, 1)),
             // ADD A, #data
@@ -1063,6 +1076,10 @@ impl<A: Memory> CPU8051<A> {
                 Ok(())
             }
             ISA8051::CLR(address) => self.store(address, 0),
+            ISA8051::DEC(address) => {
+                let data = self.load(address)?;
+                self.store(address, data - 1)
+            }
             ISA8051::DJNZ(address, offset) => {
                 let mut data = self.load(address)?;
                 println!("{:?} = {} -> {}", address, data, data - 1);
