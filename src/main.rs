@@ -309,6 +309,7 @@ impl<A: Memory> CPU8051<A> {
                     match address {
                         0x81 => {
                             self.stack_pointer = data;
+                            println!("SP = {:02x} (assigned)", self.stack_pointer);
                             Ok(())
                         }
                         0x82 => {
@@ -1118,6 +1119,7 @@ impl<A: Memory> CPU8051<A> {
                     ((next_program_counter >> 8) & 0xff) as u8,
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
+                println!("SP = {:02x}", self.stack_pointer);
                 next_program_counter = address;
                 Ok(())
             }
@@ -1146,6 +1148,7 @@ impl<A: Memory> CPU8051<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 let data = mem.read_memory(Address::InternalData(self.stack_pointer))?;
                 self.stack_pointer = self.stack_pointer - 1;
+                println!("SP = {:02x}", self.stack_pointer);
                 self.store(address, data)
             }
             ISA8051::PUSH(address) => {
@@ -1156,6 +1159,7 @@ impl<A: Memory> CPU8051<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 mem.write_memory(Address::InternalData(self.stack_pointer + 1), data)?;
                 self.stack_pointer = self.stack_pointer + 1;
+                println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             ISA8051::RET => {
@@ -1166,6 +1170,7 @@ impl<A: Memory> CPU8051<A> {
                 next_program_counter |=
                     mem.read_memory(Address::InternalData(self.stack_pointer - 1))? as u16;
                 self.stack_pointer = self.stack_pointer - 2;
+                println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             ISA8051::RETI => {
@@ -1176,6 +1181,7 @@ impl<A: Memory> CPU8051<A> {
                 next_program_counter |=
                     mem.read_memory(Address::InternalData(self.stack_pointer - 1))? as u16;
                 self.stack_pointer = self.stack_pointer - 2;
+                println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             ISA8051::SETB(address) => self.store(address, 1),
