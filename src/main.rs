@@ -50,6 +50,8 @@ enum AddressingMode {
     Register(Register8051),
     // bit direct address
     Bit(u8),
+    // bit direct address, NOT of bit
+    NotBit(u8),
     // internal ram direct address
     Direct(u8),
     // internal ram indirect address
@@ -190,15 +192,17 @@ impl<A: Memory> CPU8051<A> {
                     }
                 } else {
                     match bit {
-                        0xE0..=0xE7 => {
-                            if (self.accumulator >> (bit & 0x7)) != 0 {
-                                Ok(1)
-                            } else {
-                                Ok(0)
-                            }
-                        }
+                        0xE0..=0xE7 => Ok((self.accumulator >> (bit & 0x7)) & 0x1),
                         _ => mem.read_memory(Address::Bit(bit)),
                     }
+                }
+            }
+            AddressingMode::NotBit(bit) => {
+                let bit = self.load(AddressingMode::Bit(bit))?;
+                if bit == 1 {
+                    Ok(0)
+                } else {
+                    Ok(1)
                 }
             }
             AddressingMode::Direct(address) => {
@@ -730,17 +734,38 @@ impl<A: Memory> CPU8051<A> {
                 ISA8051::MOVC(AddressingMode::IndirectCode(Register8051::DPTR)),
                 1,
             )),
+            // SUBB A, #data
+            0x94 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::SUBB(AddressingMode::Immediate(arg1)), 2))
+            }
+            // SUBB A, iram addr
+            0x95 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                Ok((ISA8051::SUBB(AddressingMode::Direct(arg1)), 2))
+            }
+            // SUBB A, @R0
+            0x96 => Ok((ISA8051::SUBB(AddressingMode::Indirect(Register8051::R0)), 1)),
+            // SUBB A, @R0
+            0x97 => Ok((ISA8051::SUBB(AddressingMode::Indirect(Register8051::R1)), 1)),
+            // SUBB A, @R0
+            0x98..=0x9F => Ok((
+                ISA8051::SUBB(AddressingMode::Register(CPU8051::<A>::register_from_id(
+                    opcode,
+                ))),
+                1,
+            )),
             // ORL C, /bit addr (C <- C or NOT bit)
-            /*0xA0 => {
+            0xA0 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Register(Register8051::C),
-                        AddressingMode::Bit(arg1),
+                        AddressingMode::NotBit(arg1),
                     ),
                     2,
                 ))
-            }*/
+            }
             // MOV C, bit addr
             0xA2 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
@@ -1065,7 +1090,7 @@ impl<A: Memory> CPU8051<A> {
             ISA8051::ADDC(operand2) => {
                 let data = self.load(operand2)?;
                 let result: u16 =
-                    (self.accumulator as u16) + (data as u16) + (self.carry_flag as u16);
+                    (self.accumulator as u16) + (data as u16) + ((self.carry_flag & 0x1) as u16);
                 let half_result: u8 =
                     (self.accumulator & 0xf) + (data & 0xf) + (self.carry_flag & 0x1);
                 let signed_result: u8 =
@@ -1144,7 +1169,8 @@ impl<A: Memory> CPU8051<A> {
                 Ok(())
             }
             ISA8051::JNB(bit, address) => {
-                if self.load(bit)? != 0 {
+                let data = self.load(bit)?;
+                if data == 0 {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
                 }
@@ -1256,6 +1282,29 @@ impl<A: Memory> CPU8051<A> {
             ISA8051::SETB(address) => self.store(address, 1),
             ISA8051::SJMP(offset) => {
                 next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
+                Ok(())
+            }
+            ISA8051::SUBB(operand2) => {
+                let data = self.load(operand2)?;
+                let result =
+                    (self.accumulator as u16) - (data as u16) - ((self.carry_flag & 1) as u16);
+                // flags
+                if ((data & 0xf) + (self.carry_flag & 1)) > (self.accumulator & 0xf) {
+                    self.auxillary_carry_flag = 1;
+                } else {
+                    self.auxillary_carry_flag = 0;
+                }
+                if (data + (self.carry_flag & 1)) > self.accumulator {
+                    self.carry_flag = 1;
+                } else {
+                    self.carry_flag = 0;
+                }
+                if ((result as i16) > 127) || ((result as i16) < -128) {
+                    self.overflow_flag = 1;
+                } else {
+                    self.overflow_flag = 0;
+                }
+                self.accumulator = result as u8;
                 Ok(())
             }
             ISA8051::LoadDptr(a) => {
