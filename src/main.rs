@@ -483,6 +483,11 @@ impl<A: Memory> CPU8051<A> {
                 ))),
                 1,
             )),
+            // JC reladdr
+            0x40 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
+                Ok((ISA8051::JC(arg1), 2))                
+            }
             // ORL iram addr, A
             0x42 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
@@ -552,6 +557,11 @@ impl<A: Memory> CPU8051<A> {
                 ),
                 1,
             )),
+            // JNC reladdr
+            0x50 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))? as i8;
+                Ok((ISA8051::JNC(arg1), 2))                
+            }
             // ANL iram addr, A
             0x52 => {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
@@ -1099,8 +1109,24 @@ impl<A: Memory> CPU8051<A> {
                     self.store(address, data + 1)
                 }
             }
+            ISA8051::JC(address) => {
+                println!("carry = {}", self.carry_flag);
+                if self.carry_flag != 0 {
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
+            }
             ISA8051::JNB(bit, address) => {
                 if self.load(bit)? != 0 {
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
+            }
+            ISA8051::JNC(address) => {
+                println!("carry = {}", self.carry_flag);
+                if self.carry_flag == 0 {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
                 }
