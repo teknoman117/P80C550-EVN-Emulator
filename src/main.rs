@@ -142,6 +142,21 @@ impl<A: Memory> CPU8051<A> {
         }
     }
 
+    // register from number
+    fn register_from_id(id: u8) -> Register8051 {
+        match id & 0x7 {
+            0 => Register8051::R0,
+            1 => Register8051::R1,
+            2 => Register8051::R2,
+            3 => Register8051::R3,
+            4 => Register8051::R4,
+            5 => Register8051::R5,
+            6 => Register8051::R6,
+            7 => Register8051::R7,
+            _ => Register8051::A,
+        }
+    }
+
     // perform a load using a particular addressing mode
     fn load(&mut self, mode: AddressingMode) -> Result<u8, &'static str> {
         let mut mem = Rc::get_mut(&mut self.memory).unwrap();
@@ -345,17 +360,14 @@ impl<A: Memory> CPU8051<A> {
 
     // decode the next instruction and return the next program counter
     fn decode_next_instruction(&mut self) -> Result<(ISA8051, u16), &'static str> {
-        let opcode = Rc::get_mut(&mut self.memory)
-            .unwrap()
-            .read_memory(Address::Code(self.program_counter))?;
+        let mut mem = Rc::get_mut(&mut self.memory).unwrap();
+        let opcode = mem.read_memory(Address::Code(self.program_counter))?;
 
         // decode instruction
         match opcode {
             // ANL iram addr, A
             0x52 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ANL(
                         AddressingMode::Direct(arg1),
@@ -366,89 +378,51 @@ impl<A: Memory> CPU8051<A> {
             }
             // AJMP #address
             0x01 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1 as u16);
                 Ok((ISA8051::AJMP(address), 2))
             }
             // ADD A, #data
             0x24 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::ADD(AddressingMode::Immediate(arg1)), 2))
             }
             // ADD A, iram addr
             0x25 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::ADD(AddressingMode::Direct(arg1)), 2))
             }
             // ADD A, @R0
             0x26 => Ok((ISA8051::ADD(AddressingMode::Indirect(Register8051::R0)), 1)),
             // ADD A, @R1
             0x27 => Ok((ISA8051::ADD(AddressingMode::Indirect(Register8051::R1)), 1)),
-            // ADD A, R0
-            0x28 => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R0)), 1)),
-            // ADD A, R1
-            0x29 => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R1)), 1)),
-            // ADD A, R2
-            0x2A => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R2)), 1)),
-            // ADD A, R3
-            0x2B => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R3)), 1)),
-            // ADD A, R4
-            0x2C => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R4)), 1)),
-            // ADD A, R5
-            0x2D => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R5)), 1)),
-            // ADD A, R6
-            0x2E => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R6)), 1)),
-            // ADD A, R7
-            0x2F => Ok((ISA8051::ADD(AddressingMode::Register(Register8051::R7)), 1)),
+            // ADD A, R0..R7
+            0x28..=0x2F => Ok((
+                ISA8051::ADD(AddressingMode::Register(CPU8051::<A>::register_from_id(
+                    opcode,
+                ))),
+                1,
+            )),
             // ADDC A, #data
             0x34 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::ADDC(AddressingMode::Immediate(arg1)), 2))
             }
             // ADDC A, iram addr
             0x35 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::ADDC(AddressingMode::Direct(arg1)), 2))
             }
             // ADDC A, @R0
             0x36 => Ok((ISA8051::ADDC(AddressingMode::Indirect(Register8051::R0)), 1)),
             // ADDC A, @R1
             0x37 => Ok((ISA8051::ADDC(AddressingMode::Indirect(Register8051::R1)), 1)),
-            // ADDC A, R0
-            0x38 => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R0)), 1)),
-            // ADDC A, R1
-            0x39 => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R1)), 1)),
-            // ADDC A, R2
-            0x3A => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R2)), 1)),
-            // ADDC A, R3
-            0x3B => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R3)), 1)),
-            // ADDC A, R4
-            0x3C => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R4)), 1)),
-            // ADDC A, R5
-            0x3D => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R5)), 1)),
-            // ADDC A, R6
-            0x3E => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R6)), 1)),
-            // ADDC A, R7
-            0x3F => Ok((ISA8051::ADDC(AddressingMode::Register(Register8051::R7)), 1)),
+            // ADDC A, R0..R7
+            0x38..=0x3F => Ok((ISA8051::ADDC(AddressingMode::Register(CPU8051::<A>::register_from_id(opcode))), 1)),
             // CJNE A, #data, reladdr
             0xB4 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::A),
@@ -460,13 +434,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE A, iram addr, reladdr
             0xB5 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::A),
@@ -478,13 +447,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE @R0, #data, reladdr
             0xB6 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Indirect(Register8051::R0),
@@ -496,13 +460,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE @R1, #data, reladdr
             0xB7 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Indirect(Register8051::R1),
@@ -514,13 +473,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R0, #data, reladdr
             0xB8 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R0),
@@ -532,13 +486,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R1, #data, reladdr
             0xB9 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R1),
@@ -550,13 +499,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R2, #data, reladdr
             0xBA => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R2),
@@ -568,13 +512,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R3, #data, reladdr
             0xBB => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R3),
@@ -586,13 +525,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R4, #data, reladdr
             0xBC => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R4),
@@ -604,13 +538,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R5, #data, reladdr
             0xBD => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R5),
@@ -622,13 +551,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R6, #data, reladdr
             0xBE => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R6),
@@ -640,13 +564,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // CJNE R7, #data, reladdr
             0xBF => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((
                     ISA8051::CJNE(
                         AddressingMode::Register(Register8051::R7),
@@ -658,9 +577,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // CLR bit addr
             0xC2 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::CLR(AddressingMode::Bit(arg1)), 2))
             }
             // CLR C
@@ -669,13 +586,8 @@ impl<A: Memory> CPU8051<A> {
             0xE4 => Ok((ISA8051::CLR(AddressingMode::Register(Register8051::A)), 1)),
             // DJNZ iram addr, reladdr
             0xD5 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?
-                    as i8;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
                 Ok((ISA8051::DJNZ(AddressingMode::Direct(arg1), arg2), 3))
             }
             // DJNZ R0, reladdr
@@ -770,9 +682,7 @@ impl<A: Memory> CPU8051<A> {
             0x04 => Ok((ISA8051::INC(AddressingMode::Register(Register8051::A)), 1)),
             // INC iram addr
             0x05 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::INC(AddressingMode::Direct(arg1)), 2))
             }
             // INC @R0
@@ -818,31 +728,21 @@ impl<A: Memory> CPU8051<A> {
             }
             // LCALL #address
             0x12 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let address = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((ISA8051::LCALL(address), 3))
             }
             // LJMP #address
             0x02 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let address = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((ISA8051::LJMP(address), 3))
             }
             // MOV @R0, #data
             0x76 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Indirect(Register8051::R0),
@@ -853,9 +753,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV @R1, #data
             0x77 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Indirect(Register8051::R1),
@@ -882,9 +780,7 @@ impl<A: Memory> CPU8051<A> {
             )),
             // MOV @R0, iram addr
             0xA6 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Indirect(Register8051::R0),
@@ -895,9 +791,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV @R1, iram addr
             0xA7 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Indirect(Register8051::R1),
@@ -908,9 +802,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV A, #data
             0x74 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::A),
@@ -1001,9 +893,7 @@ impl<A: Memory> CPU8051<A> {
             )),
             // MOV A, iram addr
             0xE5 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::A),
@@ -1014,9 +904,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV C, bit addr
             0xA2 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::C),
@@ -1027,20 +915,14 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV DPTR, #data16
             0x90 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 let pointer = ((arg1 as u16) << 8) | (arg2 as u16);
                 Ok((ISA8051::LoadDptr(pointer), 3))
             }
             // MOV R0, #data
             0x78 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R0),
@@ -1051,9 +933,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R1, #data
             0x79 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R1),
@@ -1064,9 +944,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R2, #data
             0x7A => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R2),
@@ -1077,9 +955,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R3, #data
             0x7B => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R3),
@@ -1090,9 +966,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R4, #data
             0x7C => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R4),
@@ -1103,9 +977,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R5, #data
             0x7D => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R5),
@@ -1116,9 +988,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R6, #data
             0x7E => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R6),
@@ -1129,9 +999,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R7, #data
             0x7F => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R7),
@@ -1206,9 +1074,7 @@ impl<A: Memory> CPU8051<A> {
             )),
             // MOV R0, iram addr
             0xA8 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R0),
@@ -1219,9 +1085,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R1, iram addr
             0xA9 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R1),
@@ -1232,9 +1096,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R2, iram addr
             0xAA => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R2),
@@ -1245,9 +1107,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R3, iram addr
             0xAB => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R3),
@@ -1258,9 +1118,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R4, iram addr
             0xAC => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R4),
@@ -1271,9 +1129,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R5, iram addr
             0xAD => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R5),
@@ -1284,9 +1140,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R6, iram addr
             0xAE => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R6),
@@ -1297,9 +1151,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV R7, iram addr
             0xAF => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Register(Register8051::R7),
@@ -1310,9 +1162,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV bit addr, C
             0x92 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Bit(arg1),
@@ -1323,12 +1173,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV bit addr, C
             0x75 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1339,9 +1185,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, @R0
             0x86 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1352,9 +1196,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, @R1
             0x87 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1365,9 +1207,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R0
             0x88 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1378,9 +1218,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R1
             0x89 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1391,9 +1229,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R2
             0x8A => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1404,9 +1240,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R3
             0x8B => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1417,9 +1251,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R4
             0x8C => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1430,9 +1262,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R5
             0x8D => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1443,9 +1273,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R6
             0x8E => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1456,9 +1284,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, R7
             0x8F => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1469,9 +1295,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, A
             0xF5 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::MOV(
                         AddressingMode::Direct(arg1),
@@ -1482,12 +1306,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // MOV iram addr, iram addr
             0x85 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 Ok((
                     ISA8051::MOV(AddressingMode::Direct(arg1), AddressingMode::Direct(arg2)),
                     3,
@@ -1555,9 +1375,7 @@ impl<A: Memory> CPU8051<A> {
             0x00 => Ok((ISA8051::NOP, 1)),
             // ORL iram addr, A
             0x42 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Direct(arg1),
@@ -1568,12 +1386,8 @@ impl<A: Memory> CPU8051<A> {
             }
             // ORL iram addr, #data
             0x43 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
-                let arg2 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 2))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Direct(arg1),
@@ -1584,9 +1398,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // ORL A, #data
             0x44 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Register(Register8051::A),
@@ -1597,9 +1409,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // ORL A, #data
             0x45 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Register(Register8051::A),
@@ -1690,9 +1500,7 @@ impl<A: Memory> CPU8051<A> {
             )),
             // ORL C, bit addr
             0x72 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Register(Register8051::C),
@@ -1703,9 +1511,7 @@ impl<A: Memory> CPU8051<A> {
             }
             // ORL C, /bit addr (C <- C or NOT bit)
             /*0xA0 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((
                     ISA8051::ORL(
                         AddressingMode::Register(Register8051::C),
@@ -1716,16 +1522,12 @@ impl<A: Memory> CPU8051<A> {
             }*/
             // POP
             0xD0 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::POP(AddressingMode::Direct(arg1)), 2))
             }
             // PUSH
             0xC0 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::PUSH(AddressingMode::Direct(arg1)), 2))
             }
             // RET
@@ -1736,9 +1538,7 @@ impl<A: Memory> CPU8051<A> {
             0xD3 => Ok((ISA8051::SETB(AddressingMode::Register(Register8051::C)), 1)),
             // SETB bit addr
             0xD2 => {
-                let arg1 = Rc::get_mut(&mut self.memory)
-                    .unwrap()
-                    .read_memory(Address::Code(self.program_counter + 1))?;
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 Ok((ISA8051::SETB(AddressingMode::Bit(arg1)), 2))
             }
             // SJMP reladdr
