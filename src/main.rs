@@ -75,11 +75,11 @@ enum ISA8051 {
     DIV,
     DJNZ(AddressingMode, i8),
     INC(AddressingMode),
-    JB(u8, i8),
-    JBC(u8, i8),
+    JB(AddressingMode, i8),
+    JBC(AddressingMode, i8),
     JC(i8),
     JMP,
-    JNB(u8, i8),
+    JNB(AddressingMode, i8),
     JNC(i8),
     JNZ(i8),
     JZ(i8),
@@ -190,6 +190,13 @@ impl<A: Memory> CPU8051<A> {
                     }
                 } else {
                     match bit {
+                        0xE0..=0xE7 => {
+                            if (self.accumulator >> (bit & 0x7)) != 0 {
+                                Ok(1)
+                            } else {
+                                Ok(0)
+                            }
+                        }
                         _ => mem.read_memory(Address::Bit(bit)),
                     }
                 }
@@ -433,6 +440,12 @@ impl<A: Memory> CPU8051<A> {
                 ))),
                 1,
             )),
+            // JNB bit addr, reladdr
+            0x30 => {
+                let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
+                let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))? as i8;
+                Ok((ISA8051::JNB(AddressingMode::Bit(arg1), arg2), 3))
+            }
             // RETI
             0x32 => Ok((ISA8051::RETI, 1)),
             // ADDC A, #data
@@ -628,7 +641,7 @@ impl<A: Memory> CPU8051<A> {
                 let arg1 = mem.read_memory(Address::Code(self.program_counter + 1))?;
                 let arg2 = mem.read_memory(Address::Code(self.program_counter + 2))?;
                 Ok((
-                    ISA8051::MOV(AddressingMode::Direct(arg1), AddressingMode::Direct(arg2)),
+                    ISA8051::MOV(AddressingMode::Direct(arg2), AddressingMode::Direct(arg1)),
                     3,
                 ))
             }
@@ -991,61 +1004,6 @@ impl<A: Memory> CPU8051<A> {
         println!("{:04x}: {:?}", self.program_counter, instruction);
 
         let result = match instruction {
-            ISA8051::NOP => Ok(()),
-            ISA8051::AJMP(address) => {
-                next_program_counter = (self.program_counter & 0xF800) | address;
-                Ok(())
-            }
-            ISA8051::CJNE(operand1, operand2, offset) => {
-                let operand1 = self.load(operand1)?;
-                let operand2 = self.load(operand2)?;
-                self.carry_flag = if operand1 < operand2 { 1 } else { 0 };
-                if operand1 != operand2 {
-                    next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
-                }
-                Ok(())
-            }
-            ISA8051::CLR(address) => self.store(address, 0),
-            ISA8051::DJNZ(address, offset) => {
-                let mut data = self.load(address)?;
-                println!("{:?} = {} -> {}", address, data, data - 1);
-                data = data - 1;
-                self.store(address, data)?;
-                if data != 0 {
-                    next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
-                }
-                Ok(())
-            }
-            ISA8051::INC(address) => {
-                if let AddressingMode::Register(Register8051::DPTR) = address {
-                    self.data_pointer = self.data_pointer + 1;
-                    Ok(())
-                } else {
-                    let data = self.load(address)?;
-                    self.store(address, data + 1)
-                }
-            }
-            ISA8051::LJMP(address) => {
-                next_program_counter = address;
-                Ok(())
-            }
-            ISA8051::LCALL(address) => {
-                if self.stack_pointer >= 127 {
-                    panic!("stack overflow in LCALL");
-                }
-                let mem = Rc::get_mut(&mut self.memory).unwrap();
-                mem.write_memory(
-                    Address::InternalData(self.stack_pointer + 1),
-                    (next_program_counter & 0xff) as u8,
-                )?;
-                mem.write_memory(
-                    Address::InternalData(self.stack_pointer + 2),
-                    ((next_program_counter >> 8) & 0xff) as u8,
-                )?;
-                self.stack_pointer = self.stack_pointer + 2;
-                next_program_counter = address;
-                Ok(())
-            }
             ISA8051::ADD(operand2) => {
                 let data = self.load(operand2)?;
                 let result: u16 = (self.accumulator as u16) + (data as u16);
@@ -1086,9 +1044,49 @@ impl<A: Memory> CPU8051<A> {
                 }
                 Ok(())
             }
+            ISA8051::AJMP(address) => {
+                next_program_counter = (self.program_counter & 0xF800) | address;
+                Ok(())
+            }
             ISA8051::ANL(operand1, operand2) => {
                 let data = self.load(operand1)? & self.load(operand2)?;
                 self.store(operand1, data)
+            }
+            ISA8051::CJNE(operand1, operand2, offset) => {
+                let operand1 = self.load(operand1)?;
+                let operand2 = self.load(operand2)?;
+                self.carry_flag = if operand1 < operand2 { 1 } else { 0 };
+                if operand1 != operand2 {
+                    next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
+                }
+                Ok(())
+            }
+            ISA8051::CLR(address) => self.store(address, 0),
+            ISA8051::DJNZ(address, offset) => {
+                let mut data = self.load(address)?;
+                println!("{:?} = {} -> {}", address, data, data - 1);
+                data = data - 1;
+                self.store(address, data)?;
+                if data != 0 {
+                    next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
+                }
+                Ok(())
+            }
+            ISA8051::INC(address) => {
+                if let AddressingMode::Register(Register8051::DPTR) = address {
+                    self.data_pointer = self.data_pointer + 1;
+                    Ok(())
+                } else {
+                    let data = self.load(address)?;
+                    self.store(address, data + 1)
+                }
+            }
+            ISA8051::JNB(bit, address) => {
+                if self.load(bit)? != 0 {
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
             }
             ISA8051::JNZ(address) => {
                 println!("accumulator = {}", self.accumulator);
@@ -1106,6 +1104,27 @@ impl<A: Memory> CPU8051<A> {
                 }
                 Ok(())
             }
+            ISA8051::LCALL(address) => {
+                if self.stack_pointer >= 127 {
+                    panic!("stack overflow in LCALL");
+                }
+                let mem = Rc::get_mut(&mut self.memory).unwrap();
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 1),
+                    (next_program_counter & 0xff) as u8,
+                )?;
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 2),
+                    ((next_program_counter >> 8) & 0xff) as u8,
+                )?;
+                self.stack_pointer = self.stack_pointer + 2;
+                next_program_counter = address;
+                Ok(())
+            }
+            ISA8051::LJMP(address) => {
+                next_program_counter = address;
+                Ok(())
+            }
             ISA8051::MOV(operand1, operand2) => {
                 let data = self.load(operand2)?;
                 self.store(operand1, data)
@@ -1118,6 +1137,7 @@ impl<A: Memory> CPU8051<A> {
                 let data = self.load(operand2)?;
                 self.store(operand1, data)
             }
+            ISA8051::NOP => Ok(()),
             ISA8051::ORL(operand1, operand2) => {
                 let data = self.load(operand1)? | self.load(operand2)?;
                 self.store(operand1, data)
