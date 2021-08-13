@@ -506,6 +506,8 @@ impl<A: Memory> CPU<A> {
             0x83 => Ok(Instruction::MOVC(AddressingMode::IndirectCode(
                 Register::PC,
             ))),
+            // DIV AB
+            0x84 => Ok(Instruction::DIV),
             // MOV iram addr, iram addr
             0x85 => Ok(Instruction::MOV(
                 AddressingMode::Direct(arg2?),
@@ -564,6 +566,10 @@ impl<A: Memory> CPU<A> {
             )),
             // INC DPTR
             0xA3 => Ok(Instruction::INC(AddressingMode::Register(Register::DPTR))),
+            // MUL AB
+            0xA4 => Ok(Instruction::MUL),
+            // Undefined instruction
+            0xA5 => Err("undefined instruction opcode"),
             // MOV @R0, iram addr
             0xA6 => Ok(Instruction::MOV(
                 AddressingMode::Indirect(Register::R0),
@@ -778,6 +784,7 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::DIV => Ok(1),
             Instruction::DJNZ(address, _) => {
                 let address = match address {
                     AddressingMode::Register(_) => 0,
@@ -815,6 +822,7 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::MOVC(_) => Ok(1),
             Instruction::MOVX(_, _) => Ok(1),
+            Instruction::MUL => Ok(1),
             Instruction::NOP => Ok(1),
             Instruction::ORL(operand1, operand2) => {
                 let operand1 = match operand1 {
@@ -976,6 +984,19 @@ impl<A: Memory> CPU<A> {
                 let data = self.load(address)?;
                 self.store(address, data - 1)
             }
+            Instruction::DIV => {
+                if self.b_register != 0 {
+                    let quotient = self.accumulator / self.b_register;
+                    let remainder = self.accumulator % self.b_register;
+                    self.accumulator = quotient;
+                    self.b_register = remainder;
+                    self.overflow_flag = 0;
+                } else {
+                    self.overflow_flag = 1;
+                }
+                self.carry_flag = 0;
+                Ok(())
+            }
             Instruction::DJNZ(address, offset) => {
                 let mut data = self.load(address)?;
                 println!("{:?} = {} -> {}", address, data, data - 1);
@@ -1089,6 +1110,18 @@ impl<A: Memory> CPU<A> {
             Instruction::MOVX(operand1, operand2) => {
                 let data = self.load(operand2)?;
                 self.store(operand1, data)
+            }
+            Instruction::MUL => {
+                let result = (self.accumulator as u16) * (self.b_register as u16);
+                self.accumulator = (result & 0xff) as u8;
+                self.b_register = ((result & 0xff00) >> 8) as u8;
+                self.carry_flag = 0;
+                if self.b_register != 0 {
+                    self.overflow_flag = 1;
+                } else {
+                    self.overflow_flag = 0;
+                }
+                Ok(())
             }
             Instruction::NOP => Ok(()),
             Instruction::ORL(operand1, operand2) => {

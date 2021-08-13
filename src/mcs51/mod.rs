@@ -90,7 +90,6 @@ pub enum Instruction {
     XCH(AddressingMode),
     XCHD(AddressingMode),
     XRL(AddressingMode, AddressingMode),
-    Undefined,
 }
 
 pub trait Memory {
