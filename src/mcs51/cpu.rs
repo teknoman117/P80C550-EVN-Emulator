@@ -422,6 +422,41 @@ impl<A: Memory> CPU<A> {
             )),
             // JZ
             0x60 => Ok(Instruction::JZ(arg1? as i8)),
+            // XRL iram addr, A
+            0x62 => Ok(Instruction::XRL(
+                AddressingMode::Direct(arg1?),
+                AddressingMode::Register(Register::A),
+            )),
+            // XRL iram addr, #data
+            0x63 => Ok(Instruction::XRL(
+                AddressingMode::Direct(arg1?),
+                AddressingMode::Immediate(arg2?),
+            )),
+            // XRL A, #data
+            0x64 => Ok(Instruction::XRL(
+                AddressingMode::Register(Register::A),
+                AddressingMode::Immediate(arg1?),
+            )),
+            // XRL A, iram addr
+            0x65 => Ok(Instruction::XRL(
+                AddressingMode::Register(Register::A),
+                AddressingMode::Direct(arg1?),
+            )),
+            // XRL A, @R0
+            0x66 => Ok(Instruction::XRL(
+                AddressingMode::Register(Register::A),
+                AddressingMode::Indirect(Register::R0),
+            )),
+            // XRL A, @R1
+            0x67 => Ok(Instruction::XRL(
+                AddressingMode::Register(Register::A),
+                AddressingMode::Indirect(Register::R1),
+            )),
+            // XRL A, Rx
+            0x68..=0x6F => Ok(Instruction::XRL(
+                AddressingMode::Register(Register::A),
+                AddressingMode::Register(register_from_op(opcode)),
+            )),
             // JNZ
             0x70 => Ok(Instruction::JNZ(arg1? as i8)),
             // ORL C, bit addr
@@ -777,6 +812,19 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::XRL(operand1, operand2) => {
+                let operand1 = match operand1 {
+                    AddressingMode::Indirect(_) => 0,
+                    AddressingMode::Register(_) => 0,
+                    _ => 1,
+                };
+                let operand2 = match operand2 {
+                    AddressingMode::Indirect(_) => 0,
+                    AddressingMode::Register(_) => 0,
+                    _ => 1,
+                };
+                Ok(operand1 + operand2 + 1)
+            }
             Instruction::LoadDptr(_) => Ok(3),
             _ => Err("unimplemented instruction (decode length)"),
         }
@@ -1038,6 +1086,10 @@ impl<A: Memory> CPU<A> {
                 }
                 self.accumulator = result as u8;
                 Ok(())
+            }
+            Instruction::XRL(operand1, operand2) => {
+                let data = self.load(operand1)? ^ self.load(operand2)?;
+                self.store(operand1, data)
             }
             Instruction::LoadDptr(a) => {
                 self.data_pointer = a;
