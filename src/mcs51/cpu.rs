@@ -638,6 +638,8 @@ impl<A: Memory> CPU<A> {
             0xD2 => Ok(Instruction::SETB(AddressingMode::Bit(arg1?))),
             // SETB C
             0xD3 => Ok(Instruction::SETB(AddressingMode::Register(Register::C))),
+            // DA A
+            0xD4 => Ok(Instruction::DA),
             // DJNZ iram addr, reladdr
             0xD5 => Ok(Instruction::DJNZ(
                 AddressingMode::Direct(arg1?),
@@ -770,6 +772,7 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::DA => Ok(1),
             Instruction::DEC(address) => match address {
                 AddressingMode::Indirect(_) => Ok(1),
                 AddressingMode::Register(_) => Ok(1),
@@ -952,6 +955,23 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::CLR(address) => self.store(address, 0),
+            Instruction::DA => {
+                let mut result = self.accumulator as u16;
+                if ((result & 0xf) > 9) || self.auxillary_carry_flag != 0 {
+                    result = result + 0x06;
+                }
+                if result > 255 {
+                    self.carry_flag = 1;
+                }
+                if (((result >> 4) & 0xf) > 9) || self.carry_flag != 0 {
+                    result = result + 0x60;
+                }
+                if result > 255 {
+                    self.carry_flag = 1;
+                }
+                self.accumulator = (result & 0xff) as u8;
+                Ok(())
+            }
             Instruction::DEC(address) => {
                 let data = self.load(address)?;
                 self.store(address, data - 1)
