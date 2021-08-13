@@ -620,6 +620,18 @@ impl<A: Memory> CPU<A> {
             0xC2 => Ok(Instruction::CLR(AddressingMode::Bit(arg1?))),
             // CLR C
             0xC3 => Ok(Instruction::CLR(AddressingMode::Register(Register::C))),
+            // SWAP A
+            0xC4 => Ok(Instruction::SWAP),
+            // XCH A, iram addr
+            0xC5 => Ok(Instruction::XCH(AddressingMode::Direct(arg1?))),
+            // XCH A, @R0
+            0xC6 => Ok(Instruction::XCH(AddressingMode::Indirect(Register::R0))),
+            // XCH A, @R1
+            0xC7 => Ok(Instruction::XCH(AddressingMode::Indirect(Register::R1))),
+            // XCH A, Rx
+            0xC8..=0xCF => Ok(Instruction::XCH(AddressingMode::Register(
+                register_from_op(opcode),
+            ))),
             // POP
             0xD0 => Ok(Instruction::POP(AddressingMode::Direct(arg1?))),
             // SETB bit addr
@@ -821,6 +833,15 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::SWAP => Ok(1),
+            Instruction::XCH(operand2) => {
+                let operand2 = match operand2 {
+                    AddressingMode::Indirect(_) => 0,
+                    AddressingMode::Register(_) => 0,
+                    _ => 1,
+                };
+                Ok(operand2 + 1)
+            }
             Instruction::XRL(operand1, operand2) => {
                 let operand1 = match operand1 {
                     AddressingMode::Indirect(_) => 0,
@@ -952,7 +973,8 @@ impl<A: Memory> CPU<A> {
             Instruction::JB(bit, address) => {
                 let data = self.load(bit)?;
                 if data != 0 {
-                    next_program_counter = ((next_program_counter as i16) + (address as i16)) as u16;
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
                 }
                 Ok(())
             }
@@ -960,7 +982,8 @@ impl<A: Memory> CPU<A> {
                 let data = self.load(bit)?;
                 if data != 0 {
                     self.store(bit, 0)?;
-                    next_program_counter = ((next_program_counter as i16) + (address as i16)) as u16;
+                    next_program_counter =
+                        ((next_program_counter as i16) + (address as i16)) as u16;
                 }
                 Ok(())
             }
@@ -1114,6 +1137,16 @@ impl<A: Memory> CPU<A> {
                 }
                 self.accumulator = result as u8;
                 Ok(())
+            }
+            Instruction::SWAP => {
+                self.accumulator =
+                    ((self.accumulator >> 4) & 0x0f) | ((self.accumulator << 4) & 0xf0);
+                Ok(())
+            }
+            Instruction::XCH(operand2) => {
+                let data = self.accumulator;
+                self.accumulator = self.load(operand2)?;
+                self.store(operand2, data)
             }
             Instruction::XRL(operand1, operand2) => {
                 let data = self.load(operand1)? ^ self.load(operand2)?;
