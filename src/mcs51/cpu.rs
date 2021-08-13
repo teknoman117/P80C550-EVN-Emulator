@@ -294,6 +294,8 @@ impl<A: Memory> CPU<A> {
             0x08..=0x0F => Ok(Instruction::INC(AddressingMode::Register(
                 register_from_op(opcode),
             ))),
+            // JBC bit addr, reladdr
+            0x10 => Ok(Instruction::JBC(AddressingMode::Bit(arg1?), arg2? as i8)),
             // ACALL #address
             0x11 | 0x31 | 0x51 | 0x71 | 0x91 | 0xB1 | 0xD1 | 0xF1 => {
                 let address = (((opcode & 0xE0) as u16) << 3) | (arg1? as u16);
@@ -316,6 +318,8 @@ impl<A: Memory> CPU<A> {
             0x18..=0x1F => Ok(Instruction::DEC(AddressingMode::Register(
                 register_from_op(opcode),
             ))),
+            // JB bit addr, reladdr
+            0x20 => Ok(Instruction::JB(AddressingMode::Bit(arg1?), arg2? as i8)),
             // RET
             0x22 => Ok(Instruction::RET),
             // ADD A, #data
@@ -464,6 +468,8 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(Register::C),
                 AddressingMode::Bit(arg1?),
             )),
+            // JMP @A+DPTR
+            0x73 => Ok(Instruction::JMP),
             // MOV A, #data
             0x74 => Ok(Instruction::MOV(
                 AddressingMode::Register(Register::A),
@@ -765,7 +771,10 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::JB(_, _) => Ok(3),
+            Instruction::JBC(_, _) => Ok(3),
             Instruction::JC(_) => Ok(2),
+            Instruction::JMP => Ok(1),
             Instruction::JNB(_, _) => Ok(3),
             Instruction::JNC(_) => Ok(2),
             Instruction::JNZ(_) => Ok(2),
@@ -940,12 +949,31 @@ impl<A: Memory> CPU<A> {
                     self.store(address, data + 1)
                 }
             }
+            Instruction::JB(bit, address) => {
+                let data = self.load(bit)?;
+                if data != 0 {
+                    next_program_counter = ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
+            }
+            Instruction::JBC(bit, address) => {
+                let data = self.load(bit)?;
+                if data != 0 {
+                    self.store(bit, 0)?;
+                    next_program_counter = ((next_program_counter as i16) + (address as i16)) as u16;
+                }
+                Ok(())
+            }
             Instruction::JC(address) => {
                 println!("carry = {}", self.carry_flag);
                 if self.carry_flag != 0 {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
                 }
+                Ok(())
+            }
+            Instruction::JMP => {
+                next_program_counter = self.data_pointer + self.accumulator as u16;
                 Ok(())
             }
             Instruction::JNB(bit, address) => {
