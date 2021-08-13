@@ -211,11 +211,19 @@ impl<A: Memory> CPU<A> {
                 let bank = self.bank << 3;
                 match register {
                     Register::R0 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 0))?;
+                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                        let mut address =
+                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                        address <<= 8;
+                        address |= mem.read_memory(Address::InternalData(bank + 0))? as u16;
                         mem.read_memory(Address::ExternalData(address as u16))
                     }
                     Register::R1 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 1))?;
+                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                        let mut address =
+                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                        address <<= 8;
+                        address |= mem.read_memory(Address::InternalData(bank + 1))? as u16;
                         mem.read_memory(Address::ExternalData(address as u16))
                     }
                     Register::DPTR => mem.read_memory(Address::ExternalData(self.data_pointer)),
@@ -326,12 +334,20 @@ impl<A: Memory> CPU<A> {
                 let bank = self.bank << 3;
                 match register {
                     Register::R0 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 0))?;
-                        mem.write_memory(Address::ExternalData(address as u16), data)
+                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                        let mut address =
+                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                        address <<= 8;
+                        address |= mem.read_memory(Address::InternalData(bank + 0))? as u16;
+                        mem.write_memory(Address::ExternalData(address), data)
                     }
                     Register::R1 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 1))?;
-                        mem.write_memory(Address::ExternalData(address as u16), data)
+                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                        let mut address =
+                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                        address <<= 8;
+                        address |= mem.read_memory(Address::InternalData(bank + 1))? as u16;
+                        mem.write_memory(Address::ExternalData(address), data)
                     }
                     Register::DPTR => {
                         mem.write_memory(Address::ExternalData(self.data_pointer), data)

@@ -19,6 +19,12 @@ struct P80C550<A: Memory, B: Memory, C: Memory> {
     th0: u8,
     th1: u8,
     ie: u8,
+
+    // 8051 io ports
+    port0: u8,
+    port1: u8,
+    port2: u8,
+    port3: u8,
 }
 
 impl<A: Memory, B: Memory, C: Memory> P80C550<A, B, C> {
@@ -34,6 +40,10 @@ impl<A: Memory, B: Memory, C: Memory> P80C550<A, B, C> {
             th0: 0,
             th1: 0,
             ie: 0,
+            port0: 0xff,
+            port1: 0xff,
+            port2: 0xff,
+            port3: 0xff,
         }
     }
 }
@@ -53,19 +63,27 @@ impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
             Address::Bit(bit) => {
                 // generally used for SFR bit access
                 match bit {
+                    0x80..=0x87 => Ok(get_bit(self.port0, bit & 7)),
                     0x88..=0x8F => Ok(get_bit(self.tcon, bit & 7)),
+                    0x90..=0x97 => Ok(get_bit(self.port1, bit & 7)),
+                    0xA0..=0xA7 => Ok(get_bit(self.port2, bit & 7)),
                     0xA8..=0xAF => Ok(get_bit(self.ie, bit & 7)),
+                    0xB0..=0xB7 => Ok(get_bit(self.port3, bit & 7)),
                     _ => Err("non-existant bit address"),
                 }
             }
             Address::SpecialFunctionRegister(a) => match a {
+                0x80 => Ok(self.port0),
                 0x88 => Ok(self.tcon),
                 0x89 => Ok(self.tmod),
                 0x8A => Ok(self.tl0),
                 0x8B => Ok(self.tl1),
                 0x8C => Ok(self.th0),
                 0x8D => Ok(self.th1),
+                0x90 => Ok(self.port1),
+                0xA0 => Ok(self.port2),
                 0xA8 => Ok(self.ie),
+                0xB0 => Ok(self.port3),
                 _ => Err("non-existant SFR"),
             },
         }
@@ -81,18 +99,38 @@ impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
             Address::Bit(bit) => {
                 // generally used for SFR bit access
                 match bit {
+                    0x80..=0x87 => {
+                        self.port0 = assign_bit(self.port0, bit & 7, data);
+                        Ok(())
+                    }
                     0x88..=0x8F => {
                         self.tcon = assign_bit(self.tcon, bit & 7, data);
+                        Ok(())
+                    }
+                    0x90..=0x97 => {
+                        self.port1 = assign_bit(self.port1, bit & 7, data);
+                        Ok(())
+                    }
+                    0xA0..=0xA7 => {
+                        self.port2 = assign_bit(self.port2, bit & 7, data);
                         Ok(())
                     }
                     0xA8..=0xAF => {
                         self.ie = assign_bit(self.ie, bit & 7, data);
                         Ok(())
                     }
+                    0xB0..=0xB7 => {
+                        self.port3 = assign_bit(self.port3, bit & 7, data);
+                        Ok(())
+                    }
                     _ => Err("non-existant bit address"),
                 }
             }
             Address::SpecialFunctionRegister(a) => match a {
+                0x80 => {
+                    self.port0 = data;
+                    Ok(())
+                }
                 0x88 => {
                     self.tcon = data;
                     Ok(())
@@ -117,8 +155,20 @@ impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
                     self.th1 = data;
                     Ok(())
                 }
+                0x90 => {
+                    self.port1 = data;
+                    Ok(())
+                }
+                0xa0 => {
+                    self.port2 = data;
+                    Ok(())
+                }
                 0xa8 => {
                     self.ie = data;
+                    Ok(())
+                }
+                0xb0 => {
+                    self.port3 = data;
                     Ok(())
                 }
                 _ => Err("non-existant SFR"),
@@ -154,6 +204,14 @@ impl<A: Memory> Memory for Peripherals<A> {
                             println!("spi.control read");
                             Ok(0x80)
                         }
+                        0x9400 => {
+                            println!("am85c30.channel.b.control");
+                            Ok(0x00)
+                        }
+                        0x9401 => {
+                            println!("am85c30.channel.b.data");
+                            Ok(0x00)
+                        }
                         _ => Err("unused address (read)"),
                     }
                 }
@@ -183,6 +241,11 @@ impl<A: Memory> Memory for Peripherals<A> {
                         0x9400 => {
                             // uart channel b control
                             println!("am85c30.channel.b.control = {:x}", data);
+                            Ok(())
+                        }
+                        0x9401 => {
+                            // uart channel b data
+                            println!("am85c30.channel.b.data = {:x}", data);
                             Ok(())
                         }
                         _ => Err("unused address (write)"),
