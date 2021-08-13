@@ -163,7 +163,7 @@ impl<A: Memory> CPU<A> {
                         Ok(())
                     }
                     Register::C => {
-                        self.carry_flag = data;
+                        self.carry_flag = data & 0x01;
                         Ok(())
                     }
                     Register::R0 => mem.write_memory(Address::InternalData(bank + 0), data),
@@ -181,7 +181,7 @@ impl<A: Memory> CPU<A> {
                 // 8051 bit values occupy 0x20 to 0x2F
                 if bit < 128 {
                     let mut octet = mem.read_memory(Address::InternalData(0x20 + (bit >> 3)))?;
-                    if data != 0 {
+                    if (data & 0x1) != 0 {
                         octet |= 1 << (bit & 0x07);
                     } else {
                         octet &= !(1 << (bit & 0x07));
@@ -189,7 +189,7 @@ impl<A: Memory> CPU<A> {
                     mem.write_memory(Address::InternalData(0x20 + (bit >> 3)), octet)
                 } else {
                     match bit {
-                        _ => mem.write_memory(Address::Bit(bit), 1),
+                        _ => mem.write_memory(Address::Bit(bit), data & 0x1),
                     }
                 }
             }
@@ -282,6 +282,8 @@ impl<A: Memory> CPU<A> {
                 let address = ((arg1? as u16) << 8) | (arg2? as u16);
                 Ok(Instruction::LJMP(address))
             }
+            // RR A
+            0x03 => Ok(Instruction::RR),
             // INC A
             0x04 => Ok(Instruction::INC(AddressingMode::Register(Register::A))),
             // INC iram addr
@@ -306,6 +308,8 @@ impl<A: Memory> CPU<A> {
                 let address = ((arg1? as u16) << 8) | (arg2? as u16);
                 Ok(Instruction::LCALL(address))
             }
+            // RRC A
+            0x13 => Ok(Instruction::RRC),
             // DEC A
             0x14 => Ok(Instruction::DEC(AddressingMode::Register(Register::A))),
             // DEC iram addr
@@ -322,6 +326,8 @@ impl<A: Memory> CPU<A> {
             0x20 => Ok(Instruction::JB(AddressingMode::Bit(arg1?), arg2? as i8)),
             // RET
             0x22 => Ok(Instruction::RET),
+            // RL A
+            0x23 => Ok(Instruction::RL),
             // ADD A, #data
             0x24 => Ok(Instruction::ADD(AddressingMode::Immediate(arg1?))),
             // ADD A, iram addr
@@ -338,6 +344,8 @@ impl<A: Memory> CPU<A> {
             0x30 => Ok(Instruction::JNB(AddressingMode::Bit(arg1?), arg2? as i8)),
             // RETI
             0x32 => Ok(Instruction::RETI),
+            // RLC A
+            0x33 => Ok(Instruction::RLC),
             // ADDC A, #data
             0x34 => Ok(Instruction::ADDC(AddressingMode::Immediate(arg1?))),
             // ADDC A, iram addr
@@ -590,6 +598,10 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(Register::C),
                 AddressingMode::NotBit(arg1?),
             )),
+            // CPL bit addr,
+            0xB2 => Ok(Instruction::CPL(AddressingMode::Bit(arg1?))),
+            // CPL C
+            0xB3 => Ok(Instruction::CPL(AddressingMode::Register(Register::C))),
             // CJNE A, #data, reladdr
             0xB4 => Ok(Instruction::CJNE(
                 AddressingMode::Register(Register::A),
@@ -734,17 +746,13 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(register_from_op(opcode)),
                 AddressingMode::Register(Register::A),
             )),
-            // catch unimplemented
-            _ => {
-                println!("unknown opcode - 0x{:02x}", opcode);
-                Err("unimplemented instruction (decode)")
-            }
         }
     }
 
     // decode length of instruction
     fn decode_instruction_length(&self, instruction: Instruction) -> Result<u16, &'static str> {
         match instruction {
+            Instruction::ACALL(_) => Ok(2),
             Instruction::ADD(operand2) => match operand2 {
                 AddressingMode::Indirect(_) => Ok(1),
                 AddressingMode::Register(_) => Ok(1),
@@ -841,6 +849,10 @@ impl<A: Memory> CPU<A> {
             Instruction::PUSH(_) => Ok(2),
             Instruction::RET => Ok(1),
             Instruction::RETI => Ok(1),
+            Instruction::RL => Ok(1),
+            Instruction::RLC => Ok(1),
+            Instruction::RR => Ok(1),
+            Instruction::RRC => Ok(1),
             Instruction::SETB(_) => Ok(2),
             Instruction::SJMP(_) => Ok(2),
             Instruction::SUBB(operand2) => match operand2 {
@@ -872,7 +884,6 @@ impl<A: Memory> CPU<A> {
                 Ok(operand1 + operand2 + 1)
             }
             Instruction::LoadDptr(_) => Ok(3),
-            _ => Err("unimplemented instruction (decode length)"),
         }
     }
 
@@ -884,6 +895,24 @@ impl<A: Memory> CPU<A> {
         println!("{:04x}: {:?}", self.program_counter, instruction);
 
         let result = match instruction {
+            Instruction::ACALL(address) => {
+                if self.stack_pointer >= 127 {
+                    panic!("stack overflow in ACALL");
+                }
+                let mem = Rc::get_mut(&mut self.memory).unwrap();
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 1),
+                    (next_program_counter & 0xff) as u8,
+                )?;
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 2),
+                    ((next_program_counter >> 8) & 0xff) as u8,
+                )?;
+                self.stack_pointer = self.stack_pointer + 2;
+                println!("SP = {:02x}", self.stack_pointer);
+                next_program_counter = (self.program_counter & 0xF800) | address;
+                Ok(())
+            }
             Instruction::ADD(operand2) => {
                 let data = self.load(operand2)?;
                 let result: u16 = (self.accumulator as u16) + (data as u16);
@@ -963,6 +992,10 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::CLR(address) => self.store(address, 0),
+            Instruction::CPL(address) => {
+                let data = self.load(address)?;
+                self.store(address, !data)
+            }
             Instruction::DA => {
                 let mut result = self.accumulator as u16;
                 if ((result & 0xf) > 9) || self.auxillary_carry_flag != 0 {
@@ -1168,6 +1201,29 @@ impl<A: Memory> CPU<A> {
                 println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
+            Instruction::RL => {
+                self.accumulator =
+                    ((self.accumulator << 1) & 0xfe) | ((self.accumulator >> 7) & 0x01);
+                Ok(())
+            }
+            Instruction::RLC => {
+                let a = self.accumulator;
+                self.accumulator = ((self.accumulator << 1) & 0xfe) | (self.carry_flag & 0x01);
+                self.carry_flag = (a >> 7) & 0x01;
+                Ok(())
+            }
+            Instruction::RR => {
+                self.accumulator =
+                    ((self.accumulator >> 1) & 0x7f) | ((self.accumulator << 7) & 0x80);
+                Ok(())
+            }
+            Instruction::RRC => {
+                let a = self.accumulator;
+                self.accumulator =
+                    ((self.accumulator >> 1) & 0x7f) | ((self.carry_flag << 7) & 0x80);
+                self.carry_flag = a & 0x01;
+                Ok(())
+            }
             Instruction::SETB(address) => self.store(address, 1),
             Instruction::SJMP(offset) => {
                 next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
@@ -1220,7 +1276,6 @@ impl<A: Memory> CPU<A> {
                 self.data_pointer = a;
                 Ok(())
             }
-            _ => Err("unimplemented instruction (execute)"),
         };
         self.program_counter = next_program_counter;
         result
