@@ -643,6 +643,10 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Direct(arg1?),
                 arg2? as i8,
             )),
+            // XCHD A, @R0
+            0xD6 => Ok(Instruction::XCHD(AddressingMode::Indirect(Register::R0))),
+            // XCHD A, @R1
+            0xD7 => Ok(Instruction::XCHD(AddressingMode::Indirect(Register::R1))),
             // DJNZ Rx, reladdr
             0xD8..=0xDF => Ok(Instruction::DJNZ(
                 AddressingMode::Register(register_from_op(opcode)),
@@ -842,6 +846,7 @@ impl<A: Memory> CPU<A> {
                 };
                 Ok(operand2 + 1)
             }
+            Instruction::XCHD(_) => Ok(1),
             Instruction::XRL(operand1, operand2) => {
                 let operand1 = match operand1 {
                     AddressingMode::Indirect(_) => 0,
@@ -1147,6 +1152,12 @@ impl<A: Memory> CPU<A> {
                 let data = self.accumulator;
                 self.accumulator = self.load(operand2)?;
                 self.store(operand2, data)
+            }
+            Instruction::XCHD(operand2) => {
+                let a = self.accumulator;
+                let i = self.load(operand2)?;
+                self.accumulator = (a & 0xf0) | (i & 0x03);
+                self.store(operand2, (i & 0xf0) | (a & 0x03))
             }
             Instruction::XRL(operand1, operand2) => {
                 let data = self.load(operand1)? ^ self.load(operand2)?;
