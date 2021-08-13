@@ -2,8 +2,9 @@ use std::path::Path;
 use std::rc::Rc;
 
 mod mcs51;
-use mcs51::cpu::{CPU, Address};
+use mcs51::cpu::{Address, CPU};
 use mcs51::memory::{Memory, RAM, ROM};
+use mcs51::{assign_bit, get_bit};
 
 struct P80C550<A: Memory, B: Memory, C: Memory> {
     rom: Rc<A>,
@@ -52,20 +53,8 @@ impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
             Address::Bit(bit) => {
                 // generally used for SFR bit access
                 match bit {
-                    0x88..=0x8F => {
-                        if (self.tcon >> (bit & 0x7)) != 0 {
-                            Ok(1)
-                        } else {
-                            Ok(0)
-                        }
-                    }
-                    0xA8..=0xAF => {
-                        if (self.ie >> (bit & 0x7)) != 0 {
-                            Ok(1)
-                        } else {
-                            Ok(0)
-                        }
-                    }
+                    0x88..=0x8F => Ok(get_bit(self.tcon, bit & 7)),
+                    0xA8..=0xAF => Ok(get_bit(self.ie, bit & 7)),
                     _ => Err("non-existant bit address"),
                 }
             }
@@ -93,19 +82,11 @@ impl<A: Memory, B: Memory, C: Memory> Memory for P80C550<A, B, C> {
                 // generally used for SFR bit access
                 match bit {
                     0x88..=0x8F => {
-                        if data != 0 {
-                            self.tcon |= 1 << (bit & 0x7);
-                        } else {
-                            self.tcon &= !(1 << (bit & 0x07));
-                        }
+                        self.tcon = assign_bit(self.tcon, bit & 7, data);
                         Ok(())
                     }
                     0xA8..=0xAF => {
-                        if data != 0 {
-                            self.ie |= 1 << (bit & 0x7);
-                        } else {
-                            self.ie &= !(1 << (bit & 0x07));
-                        }
+                        self.ie = assign_bit(self.ie, bit & 7, data);
                         Ok(())
                     }
                     _ => Err("non-existant bit address"),

@@ -1,4 +1,5 @@
 use crate::mcs51::memory::Memory;
+use crate::mcs51::{assign_bit, get_bit};
 
 use std::rc::Rc;
 
@@ -165,11 +166,7 @@ impl<A: Memory> CPU<A> {
                 // 8051 bit values occupy 0x20 to 0x2F
                 if bit < 128 {
                     let octet = mem.read_memory(Address::InternalData(0x20 + (bit >> 3)))?;
-                    if octet & (1 << (bit & 0x07)) != 0 {
-                        Ok(1)
-                    } else {
-                        Ok(0)
-                    }
+                    Ok(get_bit(octet, bit & 7))
                 } else {
                     match bit {
                         0xE0..=0xE7 => Ok((self.accumulator >> (bit & 0x7)) & 0x1),
@@ -178,14 +175,7 @@ impl<A: Memory> CPU<A> {
                     }
                 }
             }
-            AddressingMode::NotBit(bit) => {
-                let bit = self.load(AddressingMode::Bit(bit))?;
-                if bit == 1 {
-                    Ok(0)
-                } else {
-                    Ok(1)
-                }
-            }
+            AddressingMode::NotBit(bit) => Ok(!self.load(AddressingMode::Bit(bit))? & 0x1),
             AddressingMode::Direct(address) => {
                 // 128-byte iram of 8051 vs SFR (upper 128 on 8052 can only be used via indirect)
                 if address < 128 {
@@ -274,13 +264,11 @@ impl<A: Memory> CPU<A> {
             AddressingMode::Bit(bit) => {
                 // 8051 bit values occupy 0x20 to 0x2F
                 if bit < 128 {
-                    let mut octet = mem.read_memory(Address::InternalData(0x20 + (bit >> 3)))?;
-                    if (data & 0x1) != 0 {
-                        octet |= 1 << (bit & 0x07);
-                    } else {
-                        octet &= !(1 << (bit & 0x07));
-                    }
-                    mem.write_memory(Address::InternalData(0x20 + (bit >> 3)), octet)
+                    let octet = mem.read_memory(Address::InternalData(0x20 + (bit >> 3)))?;
+                    mem.write_memory(
+                        Address::InternalData(0x20 + (bit >> 3)),
+                        assign_bit(octet, bit & 7, data & 1),
+                    )
                 } else {
                     match bit {
                         _ => mem.write_memory(Address::Bit(bit), data & 0x1),
