@@ -169,8 +169,8 @@ impl<A: Memory> CPU<A> {
                     Ok(get_bit(octet, bit & 7))
                 } else {
                     match bit {
-                        0xE0..=0xE7 => Ok((self.accumulator >> (bit & 0x7)) & 0x1),
-                        0xF0..=0xF7 => Ok((self.b_register >> (bit & 0x7)) & 0x1),
+                        0xE0..=0xE7 => Ok(get_bit(self.accumulator, bit & 7)),
+                        0xF0..=0xF7 => Ok(get_bit(self.b_register, bit & 7)),
                         _ => mem.read_memory(Address::Bit(bit)),
                     }
                 }
@@ -279,6 +279,14 @@ impl<A: Memory> CPU<A> {
                     )
                 } else {
                     match bit {
+                        0xE0..=0xE7 => {
+                            self.accumulator = assign_bit(self.accumulator, bit & 7, data);
+                            Ok(())
+                        }
+                        0xF0..=0xF7 => {
+                            self.b_register = assign_bit(self.b_register, bit & 7, data);
+                            Ok(())
+                        }
                         _ => mem.write_memory(Address::Bit(bit), data & 0x1),
                     }
                 }
