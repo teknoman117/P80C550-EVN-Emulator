@@ -12,7 +12,9 @@ struct Peripherals {
 
 impl Peripherals {
     fn new() -> Peripherals {
-        Peripherals { ram: RAM::create_with_size(32768) }
+        Peripherals {
+            ram: RAM::create_with_size(32768),
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 use crate::mcs51::memory::Memory;
 use crate::mcs51::{assign_bit, get_bit};
 
+use bitflags::bitflags;
+
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug)]
@@ -111,7 +113,27 @@ fn register_from_op(id: u8) -> Register {
     }
 }
 
+bitflags! {
+    struct Flags: u8 {
+        const PARITY =         0b00000001;
+        const USER0 =          0b00000010;
+        const OVERFLOW =       0b00000100;
+        const BANKSELECT0 =    0b00001000;
+        const BANKSELECT1 =    0b00010000;
+        const USER1 =          0b00100000;
+        const AUXILIARYCARRY = 0b01000000;
+        const CARRY =          0b10000000;
+    }
+}
+
+impl Flags {
+    pub fn bank(&self) -> u8 {
+        self.bits & (Flags::BANKSELECT1 | Flags::BANKSELECT0).bits
+    }
+}
+
 pub struct CPU<A: Memory> {
+    flags: Flags,
     bank: u8,
     carry_flag: u8,
     auxillary_carry_flag: u8,
@@ -127,6 +149,7 @@ pub struct CPU<A: Memory> {
 impl<A: Memory> CPU<A> {
     pub fn new(memory: Rc<A>) -> CPU<A> {
         CPU {
+            flags: Flags::empty(),
             bank: 0,
             carry_flag: 0,
             auxillary_carry_flag: 0,
@@ -185,6 +208,7 @@ impl<A: Memory> CPU<A> {
                         0x81 => Ok(self.stack_pointer),
                         0x82 => Ok((self.data_pointer & 0xff) as u8),
                         0x83 => Ok(((self.data_pointer >> 8) & 0xff) as u8),
+                        0xD0 => Ok(self.flags.bits),
                         0xE0 => Ok(self.accumulator),
                         0xF0 => Ok(self.b_register),
                         _ => mem.read_memory(Address::SpecialFunctionRegister(address)),
@@ -1384,6 +1408,8 @@ impl<A: Memory> CPU<A> {
             }
         };
         self.program_counter = next_program_counter;
+        self.flags
+            .set(Flags::PARITY, self.accumulator.count_ones() & 1 == 1);
         result
     }
 }

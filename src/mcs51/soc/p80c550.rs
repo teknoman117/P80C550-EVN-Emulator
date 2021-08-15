@@ -172,10 +172,10 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
     }
 }
 
-pub fn create<A,B>(rom: Rc<A>, xram: Rc<B>) -> CPU<Peripherals<A, B>>
+pub fn create<A, B>(rom: Rc<A>, xram: Rc<B>) -> CPU<Peripherals<A, B>>
 where
     A: Memory,
-    B: Memory
+    B: Memory,
 {
     let soc = Rc::new(Peripherals::new(rom, xram));
     CPU::new(soc)
