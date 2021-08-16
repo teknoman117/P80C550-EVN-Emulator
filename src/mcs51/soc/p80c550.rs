@@ -1,6 +1,6 @@
 use crate::mcs51::cpu::{Address, CPU};
 use crate::mcs51::memory::{Memory, RAM};
-use crate::mcs51::{assign_bit, get_bit};
+use crate::mcs51::{get_bit, set_bit};
 
 use std::rc::Rc;
 
@@ -94,27 +94,27 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                 // generally used for SFR bit access
                 match bit {
                     0x80..=0x87 => {
-                        self.port0 = assign_bit(self.port0, bit & 7, data);
+                        self.port0 = set_bit(self.port0, bit & 7, data != 0);
                         Ok(())
                     }
                     0x88..=0x8F => {
-                        self.tcon = assign_bit(self.tcon, bit & 7, data);
+                        self.tcon = set_bit(self.tcon, bit & 7, data != 0);
                         Ok(())
                     }
                     0x90..=0x97 => {
-                        self.port1 = assign_bit(self.port1, bit & 7, data);
+                        self.port1 = set_bit(self.port1, bit & 7, data != 0);
                         Ok(())
                     }
                     0xA0..=0xA7 => {
-                        self.port2 = assign_bit(self.port2, bit & 7, data);
+                        self.port2 = set_bit(self.port2, bit & 7, data != 0);
                         Ok(())
                     }
                     0xA8..=0xAF => {
-                        self.ie = assign_bit(self.ie, bit & 7, data);
+                        self.ie = set_bit(self.ie, bit & 7, data != 0);
                         Ok(())
                     }
                     0xB0..=0xB7 => {
-                        self.port3 = assign_bit(self.port3, bit & 7, data);
+                        self.port3 = set_bit(self.port3, bit & 7, data != 0);
                         Ok(())
                     }
                     _ => Err("non-existant bit address"),

@@ -1,5 +1,5 @@
 use crate::mcs51::memory::Memory;
-use crate::mcs51::{assign_bit, get_bit};
+use crate::mcs51::{get_bit, set_bit};
 
 use bitflags::bitflags;
 
@@ -130,13 +130,17 @@ impl Flags {
     pub fn bank(&self) -> u8 {
         self.bits & (Flags::BANKSELECT1 | Flags::BANKSELECT0).bits
     }
+    pub fn carry(&self) -> u8 {
+        if self.contains(Flags::CARRY) {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 pub struct CPU<A: Memory> {
     flags: Flags,
-    carry_flag: u8,
-    auxillary_carry_flag: u8,
-    overflow_flag: u8,
     accumulator: u8,
     b_register: u8,
     stack_pointer: u8,
@@ -149,9 +153,6 @@ impl<A: Memory> CPU<A> {
     pub fn new(memory: Rc<A>) -> CPU<A> {
         CPU {
             flags: Flags::empty(),
-            carry_flag: 0,
-            auxillary_carry_flag: 0,
-            overflow_flag: 0,
             accumulator: 0,
             b_register: 0,
             stack_pointer: 0,
@@ -168,7 +169,7 @@ impl<A: Memory> CPU<A> {
             AddressingMode::Immediate(imm8) => Ok(imm8),
             AddressingMode::Register(register) => match register {
                 Register::A => Ok(self.accumulator),
-                Register::C => Ok(self.carry_flag),
+                Register::C => Ok(self.flags.carry()),
                 Register::R0 => mem.read_memory(Address::InternalData(self.flags.bank() + 0)),
                 Register::R1 => mem.read_memory(Address::InternalData(self.flags.bank() + 1)),
                 Register::R2 => mem.read_memory(Address::InternalData(self.flags.bank() + 2)),
@@ -264,7 +265,7 @@ impl<A: Memory> CPU<A> {
                     Ok(())
                 }
                 Register::C => {
-                    self.carry_flag = data & 0x01;
+                    self.flags.set(Flags::CARRY, data != 0);
                     Ok(())
                 }
                 Register::R0 => {
@@ -299,7 +300,7 @@ impl<A: Memory> CPU<A> {
                     let octet = mem.read_memory(Address::InternalData(0x20 + (bit >> 3)))?;
                     mem.write_memory(
                         Address::InternalData(0x20 + (bit >> 3)),
-                        assign_bit(octet, bit & 7, data & 1),
+                        set_bit(octet, bit & 7, data != 0),
                     )
                 } else {
                     match bit {
@@ -309,14 +310,14 @@ impl<A: Memory> CPU<A> {
                             Ok(())
                         }
                         0xE0..=0xE7 => {
-                            self.accumulator = assign_bit(self.accumulator, bit & 7, data);
+                            self.accumulator = set_bit(self.accumulator, bit & 7, data != 0);
                             Ok(())
                         }
                         0xF0..=0xF7 => {
-                            self.b_register = assign_bit(self.b_register, bit & 7, data);
+                            self.b_register = set_bit(self.b_register, bit & 7, data != 0);
                             Ok(())
                         }
-                        _ => mem.write_memory(Address::Bit(bit), data & 0x1),
+                        _ => mem.write_memory(Address::Bit(bit), data),
                     }
                 }
             }
@@ -1052,57 +1053,30 @@ impl<A: Memory> CPU<A> {
                 self.accumulator = (result & 0xff) as u8;
 
                 // flags
-                if result > 255 {
-                    self.carry_flag = 1;
-                } else {
-                    self.carry_flag = 0;
-                }
-                if half_result > 16 {
-                    self.auxillary_carry_flag = 1;
-                } else {
-                    self.auxillary_carry_flag = 0;
-                }
-                if signed_result > 127 {
-                    if self.carry_flag == 1 {
-                        self.overflow_flag = 0;
-                    } else {
-                        self.overflow_flag = 1;
-                    }
-                } else {
-                    self.overflow_flag = self.carry_flag;
-                }
+                self.flags.set(Flags::CARRY, result > 255);
+                self.flags.set(Flags::AUXILIARYCARRY, half_result > 16);
+                self.flags.set(
+                    Flags::OVERFLOW,
+                    self.flags.contains(Flags::CARRY) ^ (signed_result > 127),
+                );
                 Ok(())
             }
             Instruction::ADDC(operand2) => {
                 let data = self.load(operand2)?;
                 let result: u16 =
-                    (self.accumulator as u16) + (data as u16) + ((self.carry_flag & 0x1) as u16);
-                let half_result: u8 =
-                    (self.accumulator & 0xf) + (data & 0xf) + (self.carry_flag & 0x1);
+                    (self.accumulator as u16) + (data as u16) + (self.flags.carry() as u16);
+                let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf) + self.flags.carry();
                 let signed_result: u8 =
-                    (self.accumulator & 0x7f) + (data & 0x7f) + (self.carry_flag & 0x1);
+                    (self.accumulator & 0x7f) + (data & 0x7f) + self.flags.carry();
                 self.accumulator = (result & 0xff) as u8;
 
                 // flags
-                if result > 255 {
-                    self.carry_flag = 1;
-                } else {
-                    self.carry_flag = 0;
-                }
-                if half_result > 16 {
-                    self.auxillary_carry_flag = 1;
-                } else {
-                    self.auxillary_carry_flag = 0;
-                }
-                if signed_result > 127 {
-                    if self.carry_flag == 1 {
-                        self.overflow_flag = 0;
-                    } else {
-                        self.overflow_flag = 1;
-                    }
-                } else {
-                    self.overflow_flag = self.carry_flag;
-                }
+                self.flags.set(Flags::CARRY, result > 255);
+                self.flags.set(Flags::AUXILIARYCARRY, half_result > 16);
+                self.flags.set(
+                    Flags::OVERFLOW,
+                    self.flags.contains(Flags::CARRY) ^ (signed_result > 127),
+                );
                 Ok(())
             }
             Instruction::AJMP(address) => {
@@ -1116,7 +1090,7 @@ impl<A: Memory> CPU<A> {
             Instruction::CJNE(operand1, operand2, offset) => {
                 let operand1 = self.load(operand1)?;
                 let operand2 = self.load(operand2)?;
-                self.carry_flag = if operand1 < operand2 { 1 } else { 0 };
+                self.flags.set(Flags::CARRY, operand1 < operand2);
                 if operand1 != operand2 {
                     next_program_counter = ((next_program_counter as i16) + (offset as i16)) as u16;
                 }
@@ -1129,17 +1103,17 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::DA => {
                 let mut result = self.accumulator as u16;
-                if ((result & 0xf) > 9) || self.auxillary_carry_flag != 0 {
+                if ((result & 0xf) > 9) || self.flags.contains(Flags::AUXILIARYCARRY) {
                     result = result + 0x06;
                 }
                 if result > 255 {
-                    self.carry_flag = 1;
+                    self.flags.insert(Flags::CARRY);
                 }
-                if (((result >> 4) & 0xf) > 9) || self.carry_flag != 0 {
+                if (((result >> 4) & 0xf) > 9) || self.flags.contains(Flags::CARRY) {
                     result = result + 0x60;
                 }
                 if result > 255 {
-                    self.carry_flag = 1;
+                    self.flags.insert(Flags::CARRY);
                 }
                 self.accumulator = (result & 0xff) as u8;
                 Ok(())
@@ -1149,16 +1123,14 @@ impl<A: Memory> CPU<A> {
                 self.store(address, data - 1)
             }
             Instruction::DIV => {
+                self.flags.set(Flags::OVERFLOW, self.b_register == 0);
+                self.flags.remove(Flags::CARRY);
                 if self.b_register != 0 {
                     let quotient = self.accumulator / self.b_register;
                     let remainder = self.accumulator % self.b_register;
                     self.accumulator = quotient;
                     self.b_register = remainder;
-                    self.overflow_flag = 0;
-                } else {
-                    self.overflow_flag = 1;
                 }
-                self.carry_flag = 0;
                 Ok(())
             }
             Instruction::DJNZ(address, offset) => {
@@ -1198,8 +1170,8 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JC(address) => {
-                println!("carry = {}", self.carry_flag);
-                if self.carry_flag != 0 {
+                println!("carry = {}", self.flags.carry());
+                if self.flags.contains(Flags::CARRY) {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
                 }
@@ -1218,8 +1190,8 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JNC(address) => {
-                println!("carry = {}", self.carry_flag);
-                if self.carry_flag == 0 {
+                println!("carry = {}", self.flags.carry());
+                if !self.flags.contains(Flags::CARRY) {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
                 }
@@ -1279,12 +1251,8 @@ impl<A: Memory> CPU<A> {
                 let result = (self.accumulator as u16) * (self.b_register as u16);
                 self.accumulator = (result & 0xff) as u8;
                 self.b_register = ((result & 0xff00) >> 8) as u8;
-                self.carry_flag = 0;
-                if self.b_register != 0 {
-                    self.overflow_flag = 1;
-                } else {
-                    self.overflow_flag = 0;
-                }
+                self.flags.set(Flags::OVERFLOW, self.b_register != 0);
+                self.flags.remove(Flags::CARRY);
                 Ok(())
             }
             Instruction::NOP => Ok(()),
@@ -1339,8 +1307,8 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::RLC => {
                 let a = self.accumulator;
-                self.accumulator = ((self.accumulator << 1) & 0xfe) | (self.carry_flag & 0x01);
-                self.carry_flag = (a >> 7) & 0x01;
+                self.accumulator = ((self.accumulator << 1) & 0xfe) | self.flags.carry();
+                self.flags.set(Flags::CARRY, ((a >> 7) & 0x01) != 0);
                 Ok(())
             }
             Instruction::RR => {
@@ -1351,8 +1319,8 @@ impl<A: Memory> CPU<A> {
             Instruction::RRC => {
                 let a = self.accumulator;
                 self.accumulator =
-                    ((self.accumulator >> 1) & 0x7f) | ((self.carry_flag << 7) & 0x80);
-                self.carry_flag = a & 0x01;
+                    ((self.accumulator >> 1) & 0x7f) | ((self.flags.carry() << 7) & 0x80);
+                self.flags.set(Flags::CARRY, (a & 0x01) != 0);
                 Ok(())
             }
             Instruction::SETB(address) => self.store(address, 1),
@@ -1363,23 +1331,18 @@ impl<A: Memory> CPU<A> {
             Instruction::SUBB(operand2) => {
                 let data = self.load(operand2)?;
                 let result =
-                    (self.accumulator as u16) - (data as u16) - ((self.carry_flag & 1) as u16);
+                    (self.accumulator as u16) - (data as u16) - (self.flags.carry() as u16);
                 // flags
-                if ((data & 0xf) + (self.carry_flag & 1)) > (self.accumulator & 0xf) {
-                    self.auxillary_carry_flag = 1;
-                } else {
-                    self.auxillary_carry_flag = 0;
-                }
-                if (data + (self.carry_flag & 1)) > self.accumulator {
-                    self.carry_flag = 1;
-                } else {
-                    self.carry_flag = 0;
-                }
-                if ((result as i16) > 127) || ((result as i16) < -128) {
-                    self.overflow_flag = 1;
-                } else {
-                    self.overflow_flag = 0;
-                }
+                self.flags.set(
+                    Flags::AUXILIARYCARRY,
+                    ((data & 0xf) + self.flags.carry()) > (self.accumulator & 0xf),
+                );
+                self.flags
+                    .set(Flags::CARRY, (data + self.flags.carry()) > self.accumulator);
+                self.flags.set(
+                    Flags::OVERFLOW,
+                    ((result as i16) > 127) || ((result as i16) < -128),
+                );
                 self.accumulator = result as u8;
                 Ok(())
             }
