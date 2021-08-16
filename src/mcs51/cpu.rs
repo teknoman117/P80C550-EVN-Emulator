@@ -142,7 +142,7 @@ impl Flags {
 pub struct CPU<A: Memory> {
     flags: Flags,
     accumulator: u8,
-    b_register: u8,
+    b: u8,
     stack_pointer: u8,
     data_pointer: u16,
     program_counter: u16,
@@ -154,7 +154,7 @@ impl<A: Memory> CPU<A> {
         CPU {
             flags: Flags::empty(),
             accumulator: 0,
-            b_register: 0,
+            b: 0,
             stack_pointer: 0,
             data_pointer: 0,
             program_counter: 0,
@@ -188,7 +188,7 @@ impl<A: Memory> CPU<A> {
                 } else {
                     match bit {
                         0xE0..=0xE7 => Ok(get_bit(self.accumulator, bit & 7)),
-                        0xF0..=0xF7 => Ok(get_bit(self.b_register, bit & 7)),
+                        0xF0..=0xF7 => Ok(get_bit(self.b, bit & 7)),
                         _ => mem.read_memory(Address::Bit(bit)),
                     }
                 }
@@ -205,7 +205,7 @@ impl<A: Memory> CPU<A> {
                         0x83 => Ok(self.data_pointer.to_le_bytes()[1]),
                         0xD0 => Ok(self.flags.bits),
                         0xE0 => Ok(self.accumulator),
-                        0xF0 => Ok(self.b_register),
+                        0xF0 => Ok(self.b),
                         _ => mem.read_memory(Address::SpecialFunctionRegister(address)),
                     }
                 }
@@ -311,7 +311,7 @@ impl<A: Memory> CPU<A> {
                             Ok(())
                         }
                         0xF0..=0xF7 => {
-                            self.b_register = set_bit(self.b_register, bit & 7, data != 0);
+                            self.b = set_bit(self.b, bit & 7, data != 0);
                             Ok(())
                         }
                         _ => mem.write_memory(Address::Bit(bit), data),
@@ -348,7 +348,7 @@ impl<A: Memory> CPU<A> {
                             Ok(())
                         }
                         0xF0 => {
-                            self.b_register = data;
+                            self.b = data;
                             Ok(())
                         }
                         _ => mem.write_memory(Address::SpecialFunctionRegister(address), data),
@@ -1062,8 +1062,7 @@ impl<A: Memory> CPU<A> {
                 let result =
                     (self.accumulator as u16) + (data as u16) + (self.flags.carry() as u16);
                 let half_result = (self.accumulator & 0xf) + (data & 0xf) + self.flags.carry();
-                let signed_result =
-                    (self.accumulator & 0x7f) + (data & 0x7f) + self.flags.carry();
+                let signed_result = (self.accumulator & 0x7f) + (data & 0x7f) + self.flags.carry();
                 self.accumulator = result as u8;
 
                 // flags
@@ -1119,13 +1118,13 @@ impl<A: Memory> CPU<A> {
                 self.store(address, data - 1)
             }
             Instruction::DIV => {
-                self.flags.set(Flags::OVERFLOW, self.b_register == 0);
+                self.flags.set(Flags::OVERFLOW, self.b == 0);
                 self.flags.remove(Flags::CARRY);
-                if self.b_register != 0 {
-                    let quotient = self.accumulator / self.b_register;
-                    let remainder = self.accumulator % self.b_register;
+                if self.b != 0 {
+                    let quotient = self.accumulator / self.b;
+                    let remainder = self.accumulator % self.b;
                     self.accumulator = quotient;
-                    self.b_register = remainder;
+                    self.b = remainder;
                 }
                 Ok(())
             }
@@ -1244,10 +1243,10 @@ impl<A: Memory> CPU<A> {
                 self.store(operand1, data)
             }
             Instruction::MUL => {
-                let result = (self.accumulator as u16) * (self.b_register as u16);
+                let result = (self.accumulator as u16) * (self.b as u16);
                 self.accumulator = result.to_le_bytes()[0];
-                self.b_register = result.to_le_bytes()[1];
-                self.flags.set(Flags::OVERFLOW, self.b_register != 0);
+                self.b = result.to_le_bytes()[1];
+                self.flags.set(Flags::OVERFLOW, self.b != 0);
                 self.flags.remove(Flags::CARRY);
                 Ok(())
             }
