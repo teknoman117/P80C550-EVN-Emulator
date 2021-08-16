@@ -134,7 +134,6 @@ impl Flags {
 
 pub struct CPU<A: Memory> {
     flags: Flags,
-    bank: u8,
     carry_flag: u8,
     auxillary_carry_flag: u8,
     overflow_flag: u8,
@@ -150,7 +149,6 @@ impl<A: Memory> CPU<A> {
     pub fn new(memory: Rc<A>) -> CPU<A> {
         CPU {
             flags: Flags::empty(),
-            bank: 0,
             carry_flag: 0,
             auxillary_carry_flag: 0,
             overflow_flag: 0,
@@ -168,23 +166,19 @@ impl<A: Memory> CPU<A> {
         let mem = Rc::get_mut(&mut self.memory).unwrap();
         match mode {
             AddressingMode::Immediate(imm8) => Ok(imm8),
-            AddressingMode::Register(register) => {
-                // 8051 registers occupy the first 32-bytes of memory
-                let bank = self.bank << 3;
-                match register {
-                    Register::A => Ok(self.accumulator),
-                    Register::C => Ok(self.carry_flag),
-                    Register::R0 => mem.read_memory(Address::InternalData(bank + 0)),
-                    Register::R1 => mem.read_memory(Address::InternalData(bank + 1)),
-                    Register::R2 => mem.read_memory(Address::InternalData(bank + 2)),
-                    Register::R3 => mem.read_memory(Address::InternalData(bank + 3)),
-                    Register::R4 => mem.read_memory(Address::InternalData(bank + 4)),
-                    Register::R5 => mem.read_memory(Address::InternalData(bank + 5)),
-                    Register::R6 => mem.read_memory(Address::InternalData(bank + 6)),
-                    Register::R7 => mem.read_memory(Address::InternalData(bank + 7)),
-                    _ => Err("unsupported register"),
-                }
-            }
+            AddressingMode::Register(register) => match register {
+                Register::A => Ok(self.accumulator),
+                Register::C => Ok(self.carry_flag),
+                Register::R0 => mem.read_memory(Address::InternalData(self.flags.bank() + 0)),
+                Register::R1 => mem.read_memory(Address::InternalData(self.flags.bank() + 1)),
+                Register::R2 => mem.read_memory(Address::InternalData(self.flags.bank() + 2)),
+                Register::R3 => mem.read_memory(Address::InternalData(self.flags.bank() + 3)),
+                Register::R4 => mem.read_memory(Address::InternalData(self.flags.bank() + 4)),
+                Register::R5 => mem.read_memory(Address::InternalData(self.flags.bank() + 5)),
+                Register::R6 => mem.read_memory(Address::InternalData(self.flags.bank() + 6)),
+                Register::R7 => mem.read_memory(Address::InternalData(self.flags.bank() + 7)),
+                _ => Err("unsupported register"),
+            },
             AddressingMode::Bit(bit) => {
                 // 8051 bit values occupy 0x20 to 0x2F
                 if bit < 128 {
@@ -215,45 +209,39 @@ impl<A: Memory> CPU<A> {
                     }
                 }
             }
-            AddressingMode::Indirect(register) => {
-                // R0 or R1 indirect load
-                let bank = self.bank << 3;
-                match register {
-                    Register::R0 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 0))?;
-                        mem.read_memory(Address::InternalData(address))
-                    }
-                    Register::R1 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 1))?;
-                        mem.read_memory(Address::InternalData(address))
-                    }
-                    _ => Err("unsupported register for indirect load"),
+            AddressingMode::Indirect(register) => match register {
+                Register::R0 => {
+                    let address = mem.read_memory(Address::InternalData(self.flags.bank() + 0))?;
+                    mem.read_memory(Address::InternalData(address))
                 }
-            }
-            AddressingMode::IndirectExternal(register) => {
-                // R0 or R1 indirect load
-                let bank = self.bank << 3;
-                match register {
-                    Register::R0 => {
-                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                        let mut address =
-                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                        address <<= 8;
-                        address |= mem.read_memory(Address::InternalData(bank + 0))? as u16;
-                        mem.read_memory(Address::ExternalData(address as u16))
-                    }
-                    Register::R1 => {
-                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                        let mut address =
-                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                        address <<= 8;
-                        address |= mem.read_memory(Address::InternalData(bank + 1))? as u16;
-                        mem.read_memory(Address::ExternalData(address as u16))
-                    }
-                    Register::DPTR => mem.read_memory(Address::ExternalData(self.data_pointer)),
-                    _ => Err("unsupported register for indirect load (external)"),
+                Register::R1 => {
+                    let address = mem.read_memory(Address::InternalData(self.flags.bank() + 1))?;
+                    mem.read_memory(Address::InternalData(address))
                 }
-            }
+                _ => Err("unsupported register for indirect load"),
+            },
+            AddressingMode::IndirectExternal(register) => match register {
+                Register::R0 => {
+                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                    let mut address =
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                    address <<= 8;
+                    address |=
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))? as u16;
+                    mem.read_memory(Address::ExternalData(address as u16))
+                }
+                Register::R1 => {
+                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                    let mut address =
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                    address <<= 8;
+                    address |=
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))? as u16;
+                    mem.read_memory(Address::ExternalData(address as u16))
+                }
+                Register::DPTR => mem.read_memory(Address::ExternalData(self.data_pointer)),
+                _ => Err("unsupported register for indirect load (external)"),
+            },
             AddressingMode::IndirectCode(register) => match register {
                 Register::DPTR => {
                     mem.read_memory(Address::Code(self.data_pointer + (self.accumulator as u16)))
@@ -270,29 +258,41 @@ impl<A: Memory> CPU<A> {
     fn store(&mut self, mode: AddressingMode, data: u8) -> Result<(), &'static str> {
         let mem = Rc::get_mut(&mut self.memory).unwrap();
         match mode {
-            AddressingMode::Register(register) => {
-                // 8051 registers occupy the first 32-bytes of memory
-                let bank = self.bank << 3;
-                match register {
-                    Register::A => {
-                        self.accumulator = data;
-                        Ok(())
-                    }
-                    Register::C => {
-                        self.carry_flag = data & 0x01;
-                        Ok(())
-                    }
-                    Register::R0 => mem.write_memory(Address::InternalData(bank + 0), data),
-                    Register::R1 => mem.write_memory(Address::InternalData(bank + 1), data),
-                    Register::R2 => mem.write_memory(Address::InternalData(bank + 2), data),
-                    Register::R3 => mem.write_memory(Address::InternalData(bank + 3), data),
-                    Register::R4 => mem.write_memory(Address::InternalData(bank + 4), data),
-                    Register::R5 => mem.write_memory(Address::InternalData(bank + 5), data),
-                    Register::R6 => mem.write_memory(Address::InternalData(bank + 6), data),
-                    Register::R7 => mem.write_memory(Address::InternalData(bank + 7), data),
-                    _ => Err("unsupported register"),
+            AddressingMode::Register(register) => match register {
+                Register::A => {
+                    self.accumulator = data;
+                    Ok(())
                 }
-            }
+                Register::C => {
+                    self.carry_flag = data & 0x01;
+                    Ok(())
+                }
+                Register::R0 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 0), data)
+                }
+                Register::R1 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 1), data)
+                }
+                Register::R2 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 2), data)
+                }
+                Register::R3 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 3), data)
+                }
+                Register::R4 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 4), data)
+                }
+                Register::R5 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 5), data)
+                }
+                Register::R6 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 6), data)
+                }
+                Register::R7 => {
+                    mem.write_memory(Address::InternalData(self.flags.bank() + 7), data)
+                }
+                _ => Err("unsupported register"),
+            },
             AddressingMode::Bit(bit) => {
                 // 8051 bit values occupy 0x20 to 0x2F
                 if bit < 128 {
@@ -303,6 +303,11 @@ impl<A: Memory> CPU<A> {
                     )
                 } else {
                     match bit {
+                        0xD0..=0xD7 => {
+                            let flag = Flags::from_bits(1 << (bit & 7)).unwrap();
+                            self.flags.set(flag, data != 0);
+                            Ok(())
+                        }
                         0xE0..=0xE7 => {
                             self.accumulator = assign_bit(self.accumulator, bit & 7, data);
                             Ok(())
@@ -334,6 +339,10 @@ impl<A: Memory> CPU<A> {
                             self.data_pointer = (self.data_pointer & 0x00ff) | ((data as u16) << 8);
                             Ok(())
                         }
+                        0xD0 => {
+                            self.flags.bits = data;
+                            Ok(())
+                        }
                         0xE0 => {
                             self.accumulator = data;
                             Ok(())
@@ -346,47 +355,39 @@ impl<A: Memory> CPU<A> {
                     }
                 }
             }
-            AddressingMode::Indirect(register) => {
-                // R0 or R1 indirect store
-                let bank = self.bank << 3;
-                match register {
-                    Register::R0 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 0))?;
-                        mem.write_memory(Address::InternalData(address), data)
-                    }
-                    Register::R1 => {
-                        let address = mem.read_memory(Address::InternalData(bank + 1))?;
-                        mem.write_memory(Address::InternalData(address), data)
-                    }
-                    _ => Err("unsupported register for indirect store"),
+            AddressingMode::Indirect(register) => match register {
+                Register::R0 => {
+                    let address = mem.read_memory(Address::InternalData(self.flags.bank() + 0))?;
+                    mem.write_memory(Address::InternalData(address), data)
                 }
-            }
-            AddressingMode::IndirectExternal(register) => {
-                // R0 or R1 indirect store
-                let bank = self.bank << 3;
-                match register {
-                    Register::R0 => {
-                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                        let mut address =
-                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                        address <<= 8;
-                        address |= mem.read_memory(Address::InternalData(bank + 0))? as u16;
-                        mem.write_memory(Address::ExternalData(address), data)
-                    }
-                    Register::R1 => {
-                        // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                        let mut address =
-                            mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                        address <<= 8;
-                        address |= mem.read_memory(Address::InternalData(bank + 1))? as u16;
-                        mem.write_memory(Address::ExternalData(address), data)
-                    }
-                    Register::DPTR => {
-                        mem.write_memory(Address::ExternalData(self.data_pointer), data)
-                    }
-                    _ => Err("unsupported register for indirect store"),
+                Register::R1 => {
+                    let address = mem.read_memory(Address::InternalData(self.flags.bank() + 1))?;
+                    mem.write_memory(Address::InternalData(address), data)
                 }
-            }
+                _ => Err("unsupported register for indirect store"),
+            },
+            AddressingMode::IndirectExternal(register) => match register {
+                Register::R0 => {
+                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                    let mut address =
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                    address <<= 8;
+                    address |=
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))? as u16;
+                    mem.write_memory(Address::ExternalData(address), data)
+                }
+                Register::R1 => {
+                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
+                    let mut address =
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
+                    address <<= 8;
+                    address |=
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))? as u16;
+                    mem.write_memory(Address::ExternalData(address), data)
+                }
+                Register::DPTR => mem.write_memory(Address::ExternalData(self.data_pointer), data),
+                _ => Err("unsupported register for indirect store"),
+            },
             _ => Err("unsupported addressing mode (store)"),
         }
     }
