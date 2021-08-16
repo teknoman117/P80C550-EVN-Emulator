@@ -222,23 +222,20 @@ impl<A: Memory> CPU<A> {
                 _ => Err("unsupported register for indirect load"),
             },
             AddressingMode::IndirectExternal(register) => match register {
+                // port 2 forms the upper 8 bits of an indirect external access with R0/1
                 Register::R0 => {
-                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                    let mut address =
-                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                    address <<= 8;
-                    address |=
-                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))? as u16;
-                    mem.read_memory(Address::ExternalData(address as u16))
+                    let address = [
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))?,
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))?,
+                    ];
+                    mem.read_memory(Address::ExternalData(u16::from_le_bytes(address)))
                 }
                 Register::R1 => {
-                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                    let mut address =
-                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                    address <<= 8;
-                    address |=
-                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))? as u16;
-                    mem.read_memory(Address::ExternalData(address as u16))
+                    let address = [
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))?,
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))?,
+                    ];
+                    mem.read_memory(Address::ExternalData(u16::from_le_bytes(address)))
                 }
                 Register::DPTR => mem.read_memory(Address::ExternalData(self.data_pointer)),
                 _ => Err("unsupported register for indirect load (external)"),
@@ -368,23 +365,20 @@ impl<A: Memory> CPU<A> {
                 _ => Err("unsupported register for indirect store"),
             },
             AddressingMode::IndirectExternal(register) => match register {
+                // port 2 forms the upper 8 bits of an indirect external access with R0/1
                 Register::R0 => {
-                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                    let mut address =
-                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                    address <<= 8;
-                    address |=
-                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))? as u16;
-                    mem.write_memory(Address::ExternalData(address), data)
+                    let address = [
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 0))?,
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))?,
+                    ];
+                    mem.write_memory(Address::ExternalData(u16::from_le_bytes(address)), data)
                 }
                 Register::R1 => {
-                    // port 2 forms the upper 8 bits of an indirect external access with R0/1
-                    let mut address =
-                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))? as u16;
-                    address <<= 8;
-                    address |=
-                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))? as u16;
-                    mem.write_memory(Address::ExternalData(address), data)
+                    let address = [
+                        mem.read_memory(Address::InternalData(self.flags.bank() + 1))?,
+                        mem.read_memory(Address::SpecialFunctionRegister(0xA0))?,
+                    ];
+                    mem.write_memory(Address::ExternalData(u16::from_le_bytes(address)), data)
                 }
                 Register::DPTR => mem.write_memory(Address::ExternalData(self.data_pointer), data),
                 _ => Err("unsupported register for indirect store"),
@@ -1280,22 +1274,20 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::RET => {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
-                next_program_counter =
-                    mem.read_memory(Address::InternalData(self.stack_pointer))? as u16;
-                next_program_counter <<= 8;
-                next_program_counter |=
-                    mem.read_memory(Address::InternalData(self.stack_pointer - 1))? as u16;
+                next_program_counter = u16::from_le_bytes([
+                    mem.read_memory(Address::InternalData(self.stack_pointer - 1))?,
+                    mem.read_memory(Address::InternalData(self.stack_pointer))?,
+                ]);
                 self.stack_pointer = self.stack_pointer - 2;
                 println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             Instruction::RETI => {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
-                next_program_counter =
-                    mem.read_memory(Address::InternalData(self.stack_pointer))? as u16;
-                next_program_counter <<= 8;
-                next_program_counter |=
-                    mem.read_memory(Address::InternalData(self.stack_pointer - 1))? as u16;
+                next_program_counter = u16::from_le_bytes([
+                    mem.read_memory(Address::InternalData(self.stack_pointer - 1))?,
+                    mem.read_memory(Address::InternalData(self.stack_pointer))?,
+                ]);
                 self.stack_pointer = self.stack_pointer - 2;
                 println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
