@@ -1043,9 +1043,9 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::ADD(operand2) => {
                 let data = self.load(operand2)?;
-                let result: u16 = (self.accumulator as u16) + (data as u16);
-                let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf);
-                let signed_result: u8 = (self.accumulator & 0x7f) + (data & 0x7f);
+                let result = (self.accumulator as u16) + (data as u16);
+                let half_result = (self.accumulator & 0xf) + (data & 0xf);
+                let signed_result = (self.accumulator & 0x7f) + (data & 0x7f);
                 self.accumulator = result as u8;
 
                 // flags
@@ -1059,10 +1059,10 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::ADDC(operand2) => {
                 let data = self.load(operand2)?;
-                let result: u16 =
+                let result =
                     (self.accumulator as u16) + (data as u16) + (self.flags.carry() as u16);
-                let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf) + self.flags.carry();
-                let signed_result: u8 =
+                let half_result = (self.accumulator & 0xf) + (data & 0xf) + self.flags.carry();
+                let signed_result =
                     (self.accumulator & 0x7f) + (data & 0x7f) + self.flags.carry();
                 self.accumulator = result as u8;
 
