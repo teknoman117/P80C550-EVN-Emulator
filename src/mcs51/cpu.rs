@@ -201,8 +201,8 @@ impl<A: Memory> CPU<A> {
                 } else {
                     match address {
                         0x81 => Ok(self.stack_pointer),
-                        0x82 => Ok((self.data_pointer & 0xff) as u8),
-                        0x83 => Ok(((self.data_pointer >> 8) & 0xff) as u8),
+                        0x82 => Ok(self.data_pointer.to_le_bytes()[0]),
+                        0x83 => Ok(self.data_pointer.to_le_bytes()[1]),
                         0xD0 => Ok(self.flags.bits),
                         0xE0 => Ok(self.accumulator),
                         0xF0 => Ok(self.b_register),
@@ -330,11 +330,13 @@ impl<A: Memory> CPU<A> {
                             Ok(())
                         }
                         0x82 => {
-                            self.data_pointer = (self.data_pointer & 0xff00) | (data as u16);
+                            self.data_pointer =
+                                u16::from_le_bytes([data, self.data_pointer.to_le_bytes()[1]]);
                             Ok(())
                         }
                         0x83 => {
-                            self.data_pointer = (self.data_pointer & 0x00ff) | ((data as u16) << 8);
+                            self.data_pointer =
+                                u16::from_le_bytes([self.data_pointer.to_le_bytes()[0], data]);
                             Ok(())
                         }
                         0xD0 => {
@@ -1028,11 +1030,11 @@ impl<A: Memory> CPU<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 mem.write_memory(
                     Address::InternalData(self.stack_pointer + 1),
-                    (next_program_counter & 0xff) as u8,
+                    next_program_counter.to_le_bytes()[0],
                 )?;
                 mem.write_memory(
                     Address::InternalData(self.stack_pointer + 2),
-                    ((next_program_counter >> 8) & 0xff) as u8,
+                    next_program_counter.to_le_bytes()[1],
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
                 println!("SP = {:02x}", self.stack_pointer);
@@ -1044,7 +1046,7 @@ impl<A: Memory> CPU<A> {
                 let result: u16 = (self.accumulator as u16) + (data as u16);
                 let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf);
                 let signed_result: u8 = (self.accumulator & 0x7f) + (data & 0x7f);
-                self.accumulator = (result & 0xff) as u8;
+                self.accumulator = result as u8;
 
                 // flags
                 self.flags.set(Flags::CARRY, result > 255);
@@ -1062,7 +1064,7 @@ impl<A: Memory> CPU<A> {
                 let half_result: u8 = (self.accumulator & 0xf) + (data & 0xf) + self.flags.carry();
                 let signed_result: u8 =
                     (self.accumulator & 0x7f) + (data & 0x7f) + self.flags.carry();
-                self.accumulator = (result & 0xff) as u8;
+                self.accumulator = result as u8;
 
                 // flags
                 self.flags.set(Flags::CARRY, result > 255);
@@ -1109,7 +1111,7 @@ impl<A: Memory> CPU<A> {
                 if result > 255 {
                     self.flags.insert(Flags::CARRY);
                 }
-                self.accumulator = (result & 0xff) as u8;
+                self.accumulator = result as u8;
                 Ok(())
             }
             Instruction::DEC(address) => {
@@ -1214,11 +1216,11 @@ impl<A: Memory> CPU<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 mem.write_memory(
                     Address::InternalData(self.stack_pointer + 1),
-                    (next_program_counter & 0xff) as u8,
+                    next_program_counter.to_le_bytes()[0],
                 )?;
                 mem.write_memory(
                     Address::InternalData(self.stack_pointer + 2),
-                    ((next_program_counter >> 8) & 0xff) as u8,
+                    next_program_counter.to_le_bytes()[1],
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
                 println!("SP = {:02x}", self.stack_pointer);
@@ -1243,8 +1245,8 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::MUL => {
                 let result = (self.accumulator as u16) * (self.b_register as u16);
-                self.accumulator = (result & 0xff) as u8;
-                self.b_register = ((result & 0xff00) >> 8) as u8;
+                self.accumulator = result.to_le_bytes()[0];
+                self.b_register = result.to_le_bytes()[1];
                 self.flags.set(Flags::OVERFLOW, self.b_register != 0);
                 self.flags.remove(Flags::CARRY);
                 Ok(())
@@ -1293,8 +1295,7 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::RL => {
-                self.accumulator =
-                    ((self.accumulator << 1) & 0xfe) | ((self.accumulator >> 7) & 0x01);
+                self.accumulator = self.accumulator.rotate_left(1);
                 Ok(())
             }
             Instruction::RLC => {
@@ -1304,8 +1305,7 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::RR => {
-                self.accumulator =
-                    ((self.accumulator >> 1) & 0x7f) | ((self.accumulator << 7) & 0x80);
+                self.accumulator = self.accumulator.rotate_right(1);
                 Ok(())
             }
             Instruction::RRC => {
