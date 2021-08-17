@@ -187,6 +187,14 @@ impl<A: Memory> CPU<A> {
                     Ok(get_bit(octet, bit & 7))
                 } else {
                     match bit {
+                        0xD0..=0xD7 => {
+                            let flag = Flags::from_bits(1 << (bit & 7)).unwrap();
+                            if self.flags.contains(flag) {
+                                Ok(1)
+                            } else {
+                                Ok(0)
+                            }
+                        }
                         0xE0..=0xE7 => Ok(get_bit(self.accumulator, bit & 7)),
                         0xF0..=0xF7 => Ok(get_bit(self.b, bit & 7)),
                         _ => mem.read_memory(Address::Bit(bit)),
