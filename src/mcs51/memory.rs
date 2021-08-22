@@ -6,6 +6,7 @@ use std::path::Path;
 pub trait Memory {
     fn read_memory(&mut self, address: Address) -> Result<u8, &'static str>;
     fn write_memory(&mut self, address: Address, data: u8) -> Result<(), &'static str>;
+    fn tick(&mut self);
 }
 
 pub struct ROM {
@@ -43,6 +44,9 @@ impl Memory for ROM {
     fn write_memory(&mut self, _address: Address, _data: u8) -> Result<(), &'static str> {
         Err("write attempted to read-only memory")
     }
+
+    // rom has no tick function
+    fn tick(&mut self) {}
 }
 
 pub struct RAM {
@@ -95,4 +99,7 @@ impl Memory for RAM {
             Err("unsupported addressing mode for RAM (write)")
         }
     }
+
+    // ram has no tick function
+    fn tick(&mut self) {}
 }

@@ -1023,9 +1023,8 @@ impl<A: Memory> CPU<A> {
         }
     }
 
-    // step
-    pub fn step(&mut self) -> Result<(), &'static str> {
-        let instruction = self.decode_next_instruction()?;
+    // execute an instruction
+    pub fn execute_instruction(&mut self, instruction: Instruction) -> Result<(), &'static str> {
         let length = self.decode_instruction_length(instruction)?;
         let mut next_program_counter = self.program_counter + length;
         println!("{:04x}: {:?}", self.program_counter, instruction);
@@ -1374,5 +1373,12 @@ impl<A: Memory> CPU<A> {
         self.flags
             .set(Flags::PARITY, self.accumulator.count_ones() & 1 == 1);
         result
+    }
+
+    pub fn step(&mut self) -> Result<(), &'static str> {
+        let instruction = self.decode_next_instruction()?;
+        self.execute_instruction(instruction)?;
+        Rc::get_mut(&mut self.memory).unwrap().tick();
+        Ok(())
     }
 }

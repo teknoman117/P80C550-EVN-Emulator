@@ -1,5 +1,6 @@
 pub mod cpu;
 pub mod memory;
+pub mod peripherals;
 pub mod soc;
 
 use std::ops::{BitAnd, BitOr, Not, Shl};

@@ -1,5 +1,6 @@
 use crate::mcs51::cpu::{Address, CPU};
 use crate::mcs51::memory::{Memory, RAM};
+use crate::mcs51::peripherals::timer::Timer;
 use crate::mcs51::{get_bit, set_bit};
 
 use std::rc::Rc;
@@ -10,13 +11,7 @@ pub struct Peripherals<A: Memory, B: Memory> {
     iram: RAM,
 
     // 8051 peripherals
-    tcon: u8,
-    tmod: u8,
-    tl0: u8,
-    tl1: u8,
-    th0: u8,
-    th1: u8,
-    ie: u8,
+    timer: Timer,
 
     // 8051 io ports
     port0: u8,
@@ -31,13 +26,7 @@ impl<A: Memory, B: Memory> Peripherals<A, B> {
             rom: rom,
             iram: RAM::create_with_size(128),
             xram: xram,
-            tcon: 0,
-            tmod: 0,
-            tl0: 0,
-            tl1: 0,
-            th0: 0,
-            th1: 0,
-            ie: 0,
+            timer: Timer::new(),
             port0: 0xff,
             port1: 0xff,
             port2: 0xff,
@@ -60,26 +49,19 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                 // generally used for SFR bit access
                 match bit {
                     0x80..=0x87 => Ok(get_bit(self.port0, bit & 7)),
-                    0x88..=0x8F => Ok(get_bit(self.tcon, bit & 7)),
                     0x90..=0x97 => Ok(get_bit(self.port1, bit & 7)),
                     0xA0..=0xA7 => Ok(get_bit(self.port2, bit & 7)),
-                    0xA8..=0xAF => Ok(get_bit(self.ie, bit & 7)),
                     0xB0..=0xB7 => Ok(get_bit(self.port3, bit & 7)),
+                    0x88..=0x8F | 0xA8..=0xAF => self.timer.read_memory(address),
                     _ => Err("non-existant bit address"),
                 }
             }
             Address::SpecialFunctionRegister(a) => match a {
                 0x80 => Ok(self.port0),
-                0x88 => Ok(self.tcon),
-                0x89 => Ok(self.tmod),
-                0x8A => Ok(self.tl0),
-                0x8B => Ok(self.tl1),
-                0x8C => Ok(self.th0),
-                0x8D => Ok(self.th1),
                 0x90 => Ok(self.port1),
                 0xA0 => Ok(self.port2),
-                0xA8 => Ok(self.ie),
                 0xB0 => Ok(self.port3),
+                0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D | 0xA8 => self.timer.read_memory(address),
                 _ => Err("non-existant SFR"),
             },
         }
@@ -97,10 +79,6 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                         self.port0 = set_bit(self.port0, bit & 7, data != 0);
                         Ok(())
                     }
-                    0x88..=0x8F => {
-                        self.tcon = set_bit(self.tcon, bit & 7, data != 0);
-                        Ok(())
-                    }
                     0x90..=0x97 => {
                         self.port1 = set_bit(self.port1, bit & 7, data != 0);
                         Ok(())
@@ -109,44 +87,17 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                         self.port2 = set_bit(self.port2, bit & 7, data != 0);
                         Ok(())
                     }
-                    0xA8..=0xAF => {
-                        self.ie = set_bit(self.ie, bit & 7, data != 0);
-                        Ok(())
-                    }
                     0xB0..=0xB7 => {
                         self.port3 = set_bit(self.port3, bit & 7, data != 0);
                         Ok(())
                     }
+                    0x88..=0x8F | 0xA8..=0xAF => self.timer.write_memory(address, data),
                     _ => Err("non-existant bit address"),
                 }
             }
             Address::SpecialFunctionRegister(a) => match a {
                 0x80 => {
                     self.port0 = data;
-                    Ok(())
-                }
-                0x88 => {
-                    self.tcon = data;
-                    Ok(())
-                }
-                0x89 => {
-                    self.tmod = data;
-                    Ok(())
-                }
-                0x8a => {
-                    self.tl0 = data;
-                    Ok(())
-                }
-                0x8b => {
-                    self.tl1 = data;
-                    Ok(())
-                }
-                0x8c => {
-                    self.th0 = data;
-                    Ok(())
-                }
-                0x8d => {
-                    self.th1 = data;
                     Ok(())
                 }
                 0x90 => {
@@ -157,18 +108,25 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                     self.port2 = data;
                     Ok(())
                 }
-                0xa8 => {
-                    self.ie = data;
-                    Ok(())
-                }
                 0xb0 => {
                     self.port3 = data;
                     Ok(())
+                }
+                0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D | 0xA8 => {
+                    self.timer.write_memory(address, data)
                 }
                 _ => Err("non-existant SFR"),
             },
             _ => Err("unsupported addressing mode for memory mapper (write)"),
         }
+    }
+
+    // tick updates peripherals
+    fn tick(&mut self) {
+        Rc::get_mut(&mut self.rom).unwrap().tick();
+        Rc::get_mut(&mut self.xram).unwrap().tick();
+        self.iram.tick();
+        self.timer.tick();
     }
 }
 

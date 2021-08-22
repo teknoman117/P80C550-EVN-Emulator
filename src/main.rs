@@ -83,6 +83,8 @@ impl Memory for Peripherals {
             _ => Err("unsupported address space"),
         }
     }
+
+    fn tick(&mut self) {}
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
