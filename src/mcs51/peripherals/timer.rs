@@ -1,6 +1,5 @@
 use crate::mcs51::cpu::Address;
 use crate::mcs51::memory::Memory;
-use crate::mcs51::{get_bit, set_bit};
 
 use bitflags::bitflags;
 
@@ -62,7 +61,6 @@ impl TMOD {
 pub struct Timer {
     tcon: TCON,
     tmod: TMOD,
-    ie: u8,
     t0_value: u16,
     t1_value: u16,
 }
@@ -72,7 +70,6 @@ impl Timer {
         Timer {
             tcon: TCON::empty(),
             tmod: TMOD::empty(),
-            ie: 0,
             t0_value: 0,
             t1_value: 0,
         }
@@ -93,7 +90,6 @@ impl Memory for Timer {
                             Ok(0)
                         }
                     }
-                    0xA8..=0xAF => Ok(get_bit(self.ie, bit & 7)),
                     _ => Err("non-existant bit address"),
                 }
             }
@@ -104,7 +100,6 @@ impl Memory for Timer {
                 0x8B => Ok(self.t1_value.to_le_bytes()[0]),
                 0x8C => Ok(self.t0_value.to_le_bytes()[1]),
                 0x8D => Ok(self.t1_value.to_le_bytes()[1]),
-                0xA8 => Ok(self.ie),
                 _ => Err("non-existant SFR"),
             },
             _ => Err("unsupported addressing mode for timer"),
@@ -119,10 +114,6 @@ impl Memory for Timer {
                     0x88..=0x8F => {
                         let flag = TCON::from_bits(1 << (bit & 7)).unwrap();
                         self.tcon.set(flag, data != 0);
-                        Ok(())
-                    }
-                    0xA8..=0xAF => {
-                        self.ie = set_bit(self.ie, bit & 7, data != 0);
                         Ok(())
                     }
                     _ => Err("non-existant bit address"),
@@ -151,10 +142,6 @@ impl Memory for Timer {
                 }
                 0x8d => {
                     self.t1_value = u16::from_le_bytes([self.t1_value.to_le_bytes()[0], data]);
-                    Ok(())
-                }
-                0xa8 => {
-                    self.ie = data;
                     Ok(())
                 }
                 _ => Err("non-existant SFR"),
