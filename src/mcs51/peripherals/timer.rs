@@ -19,10 +19,10 @@ bitflags! {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TimerMode {
-    Mode_13Bit,
-    Mode_16Bit,
-    Mode_8Bit_AutoReload,
-    Mode_Split,
+    Mode13Bit,
+    Mode16Bit,
+    Mode8BitAutoReload,
+    ModeSplit,
 }
 
 bitflags! {
@@ -41,20 +41,20 @@ bitflags! {
 impl TMOD {
     pub fn timer0_mode(&self) -> TimerMode {
         match self.bits & (TMOD::T0_M1 | TMOD::T0_M0).bits {
-            0 => TimerMode::Mode_13Bit,
-            1 => TimerMode::Mode_16Bit,
-            2 => TimerMode::Mode_8Bit_AutoReload,
-            3 => TimerMode::Mode_Split,
-            _ => TimerMode::Mode_Split,
+            0 => TimerMode::Mode13Bit,
+            1 => TimerMode::Mode16Bit,
+            2 => TimerMode::Mode8BitAutoReload,
+            3 => TimerMode::ModeSplit,
+            _ => TimerMode::ModeSplit,
         }
     }
     pub fn timer1_mode(&self) -> TimerMode {
         match self.bits & (TMOD::T1_M1 | TMOD::T1_M0).bits {
-            0x00 => TimerMode::Mode_13Bit,
-            0x10 => TimerMode::Mode_16Bit,
-            0x20 => TimerMode::Mode_8Bit_AutoReload,
-            0x30 => TimerMode::Mode_Split,
-            _ => TimerMode::Mode_Split,
+            0x00 => TimerMode::Mode13Bit,
+            0x10 => TimerMode::Mode16Bit,
+            0x20 => TimerMode::Mode8BitAutoReload,
+            0x30 => TimerMode::ModeSplit,
+            _ => TimerMode::ModeSplit,
         }
     }
 }
@@ -168,7 +168,7 @@ impl Memory for Timer {
         //   counter mode (C/T = 1), timer only counts if T0/1 is high
         //   gate mode (GATE = 1), timer only counts if INT0/1 is high
         match self.tmod.timer0_mode() {
-            TimerMode::Mode_13Bit => {
+            TimerMode::Mode13Bit => {
                 if self.tcon.contains(TCON::TR0) {
                     let values = self.t0_value.to_le_bytes();
                     let lower = (values[0] & 0x1f) + 1;
@@ -187,7 +187,7 @@ impl Memory for Timer {
                     self.t0_value = u16::from_le_bytes([lower & 0x1f, upper]);
                 }
             }
-            TimerMode::Mode_16Bit => {
+            TimerMode::Mode16Bit => {
                 if self.tcon.contains(TCON::TR0) {
                     self.t0_value = match self.t0_value.checked_add(1) {
                         Some(v) => v,
@@ -198,7 +198,7 @@ impl Memory for Timer {
                     }
                 }
             }
-            TimerMode::Mode_8Bit_AutoReload => {
+            TimerMode::Mode8BitAutoReload => {
                 if self.tcon.contains(TCON::TR0) {
                     let value = self.t0_value.to_le_bytes()[0];
                     let reload = self.t0_value.to_le_bytes()[1];
@@ -212,7 +212,7 @@ impl Memory for Timer {
                     self.t0_value = u16::from_le_bytes([next_value, reload]);
                 }
             }
-            TimerMode::Mode_Split => {
+            TimerMode::ModeSplit => {
                 self.t0_value = u16::from_le_bytes({
                     let values = self.t0_value.to_le_bytes();
                     [
@@ -245,8 +245,8 @@ impl Memory for Timer {
             }
         }
         match self.tmod.timer1_mode() {
-            TimerMode::Mode_13Bit => {
-                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::Mode_Split
+            TimerMode::Mode13Bit => {
+                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::ModeSplit
                 {
                     let values = self.t1_value.to_le_bytes();
                     let lower = (values[0] & 0x1f) + 1;
@@ -254,7 +254,7 @@ impl Memory for Timer {
                         match values[1].checked_add(1) {
                             Some(v) => v,
                             None => {
-                                if self.tmod.timer0_mode() != TimerMode::Mode_Split {
+                                if self.tmod.timer0_mode() != TimerMode::ModeSplit {
                                     self.tcon.insert(TCON::TF1);
                                 }
                                 0
@@ -267,13 +267,13 @@ impl Memory for Timer {
                     self.t1_value = u16::from_le_bytes([lower & 0x1f, upper]);
                 }
             }
-            TimerMode::Mode_16Bit => {
-                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::Mode_Split
+            TimerMode::Mode16Bit => {
+                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::ModeSplit
                 {
                     self.t1_value = match self.t1_value.checked_add(1) {
                         Some(v) => v,
                         None => {
-                            if self.tmod.timer0_mode() != TimerMode::Mode_Split {
+                            if self.tmod.timer0_mode() != TimerMode::ModeSplit {
                                 self.tcon.insert(TCON::TF1);
                             }
                             0
@@ -281,15 +281,15 @@ impl Memory for Timer {
                     }
                 }
             }
-            TimerMode::Mode_8Bit_AutoReload => {
-                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::Mode_Split
+            TimerMode::Mode8BitAutoReload => {
+                if self.tcon.contains(TCON::TR1) || self.tmod.timer0_mode() == TimerMode::ModeSplit
                 {
                     let value = self.t1_value.to_le_bytes()[0];
                     let reload = self.t1_value.to_le_bytes()[1];
                     let next_value = match value.checked_add(1) {
                         Some(v) => v,
                         None => {
-                            if self.tmod.timer0_mode() != TimerMode::Mode_Split {
+                            if self.tmod.timer0_mode() != TimerMode::ModeSplit {
                                 self.tcon.insert(TCON::TF1);
                             }
                             reload
@@ -298,7 +298,7 @@ impl Memory for Timer {
                     self.t1_value = u16::from_le_bytes([next_value, reload]);
                 }
             }
-            TimerMode::Mode_Split => panic!("timer 1 does not support split mode"),
+            TimerMode::ModeSplit => panic!("timer 1 does not support split mode"),
         }
     }
 }
