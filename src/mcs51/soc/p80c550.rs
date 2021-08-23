@@ -1,4 +1,4 @@
-use crate::mcs51::cpu::{Address, CPU};
+use crate::mcs51::cpu::{Address, InterruptSource, CPU};
 use crate::mcs51::memory::{Memory, RAM};
 use crate::mcs51::peripherals::timer::Timer;
 use crate::mcs51::{get_bit, set_bit};
@@ -39,7 +39,11 @@ bitflags! {
     }
 }
 
-pub struct Peripherals<A: Memory, B: Memory> {
+pub struct Peripherals<A, B>
+where
+    A: Memory,
+    B: Memory,
+{
     rom: Rc<A>,
     xram: Rc<B>,
     iram: RAM,
@@ -59,7 +63,11 @@ pub struct Peripherals<A: Memory, B: Memory> {
     pcon: PCON,
 }
 
-impl<A: Memory, B: Memory> Peripherals<A, B> {
+impl<A, B> Peripherals<A, B>
+where
+    A: Memory,
+    B: Memory,
+{
     pub fn new(rom: Rc<A>, xram: Rc<B>) -> Peripherals<A, B> {
         Peripherals {
             rom: rom,
@@ -77,7 +85,11 @@ impl<A: Memory, B: Memory> Peripherals<A, B> {
     }
 }
 
-impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
+impl<A, B> Memory for Peripherals<A, B>
+where
+    A: Memory,
+    B: Memory,
+{
     fn read_memory(&mut self, address: Address) -> Result<u8, &'static str> {
         match address {
             Address::Code(a) => Rc::get_mut(&mut self.rom)
@@ -171,9 +183,7 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
                     self.port0 = data;
                     Ok(())
                 }
-                0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D => {
-                    self.timer.write_memory(address, data)
-                }
+                0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D => self.timer.write_memory(address, data),
                 0x90 => {
                     self.port1 = data;
                     Ok(())
@@ -210,6 +220,24 @@ impl<A: Memory, B: Memory> Memory for Peripherals<A, B> {
         Rc::get_mut(&mut self.xram).unwrap().tick();
         self.iram.tick();
         self.timer.tick();
+    }
+}
+
+impl<A, B> InterruptSource for Peripherals<A, B>
+where
+    A: Memory,
+    B: Memory,
+{
+    fn peek_vector(&mut self) -> Option<(u8, u8)> {
+        if self.ie.contains(IE::EA) {
+            None
+        } else {
+            None
+        }
+    }
+
+    fn pop_vector(&mut self) {
+
     }
 }
 

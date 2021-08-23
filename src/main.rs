@@ -97,7 +97,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     // create the cpu
     let mut cpu = p80c550::create(rom, peripherals);
-    loop {
+
+    // run 1 second at 11.0592 MHz
+    for _ in 1..921600 {
         cpu.step()?;
     }
 

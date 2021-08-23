@@ -65,6 +65,7 @@ pub enum Instruction {
     DIV,
     DJNZ(AddressingMode, i8),
     INC(AddressingMode),
+    Interrupt(u16, u8),
     JB(AddressingMode, i8),
     JBC(AddressingMode, i8),
     JC(i8),
@@ -139,7 +140,16 @@ impl Flags {
     }
 }
 
-pub struct CPU<A: Memory> {
+pub trait InterruptSource {
+    // get a vector of with equal or greater priority (return vector and priority)
+    fn peek_vector(&mut self) -> Option<(u8, u8)>;
+    fn pop_vector(&mut self);
+}
+
+pub struct CPU<A>
+where
+    A: Memory + InterruptSource,
+{
     flags: Flags,
     accumulator: u8,
     b: u8,
@@ -147,9 +157,14 @@ pub struct CPU<A: Memory> {
     data_pointer: u16,
     program_counter: u16,
     memory: Rc<A>,
+    ip0: bool,
+    ip1: bool,
 }
 
-impl<A: Memory> CPU<A> {
+impl<A> CPU<A>
+where
+    A: Memory + InterruptSource,
+{
     pub fn new(memory: Rc<A>) -> CPU<A> {
         CPU {
             flags: Flags::empty(),
@@ -159,6 +174,8 @@ impl<A: Memory> CPU<A> {
             data_pointer: 0,
             program_counter: 0,
             memory: memory,
+            ip0: false,
+            ip1: false
         }
     }
 
@@ -334,7 +351,6 @@ impl<A: Memory> CPU<A> {
                     match address {
                         0x81 => {
                             self.stack_pointer = data;
-                            println!("SP = {:02x} (assigned)", self.stack_pointer);
                             Ok(())
                         }
                         0x82 => {
@@ -397,8 +413,13 @@ impl<A: Memory> CPU<A> {
         }
     }
 
-    // decode the next instruction and return the next program counter
+    // decode the next instruction or interrupt
     fn decode_next_instruction(&mut self) -> Result<Instruction, &'static str> {
+        self.decode_next_opcode()
+    }
+
+    // decode the next instruction
+    fn decode_next_opcode(&mut self) -> Result<Instruction, &'static str> {
         let mem = Rc::get_mut(&mut self.memory).unwrap();
         let opcode = mem.read_memory(Address::Code(self.program_counter))?;
         let arg1 = mem.read_memory(Address::Code(self.program_counter + 1));
@@ -941,6 +962,7 @@ impl<A: Memory> CPU<A> {
                 AddressingMode::Register(_) => Ok(1),
                 _ => Ok(2),
             },
+            Instruction::Interrupt(_, _) => Ok(0),
             Instruction::JB(_, _) => Ok(3),
             Instruction::JBC(_, _) => Ok(3),
             Instruction::JC(_) => Ok(2),
@@ -1044,7 +1066,6 @@ impl<A: Memory> CPU<A> {
                     next_program_counter.to_le_bytes()[1],
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
-                println!("SP = {:02x}", self.stack_pointer);
                 next_program_counter = (self.program_counter & 0xF800) | address;
                 Ok(())
             }
@@ -1137,7 +1158,6 @@ impl<A: Memory> CPU<A> {
             }
             Instruction::DJNZ(address, offset) => {
                 let mut data = self.load(address)?;
-                println!("{:?} = {} -> {}", address, data, data - 1);
                 data = data - 1;
                 self.store(address, data)?;
                 if data != 0 {
@@ -1153,6 +1173,29 @@ impl<A: Memory> CPU<A> {
                     let data = self.load(address)?;
                     self.store(address, data + 1)
                 }
+            }
+            Instruction::Interrupt(address, priority) => {
+                if self.stack_pointer >= 127 {
+                    panic!("stack overflow in Interrupt");
+                }
+                let mem = Rc::get_mut(&mut self.memory).unwrap();
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 1),
+                    next_program_counter.to_le_bytes()[0],
+                )?;
+                mem.write_memory(
+                    Address::InternalData(self.stack_pointer + 2),
+                    next_program_counter.to_le_bytes()[1],
+                )?;
+                self.stack_pointer = self.stack_pointer + 2;
+                next_program_counter = address;
+                match priority {
+                    0 => self.ip0 = true,
+                    1 => self.ip1 = true,
+                    _ => panic!("unsupported priority"),
+                }
+                mem.pop_vector();
+                Ok(())
             }
             Instruction::JB(bit, address) => {
                 let data = self.load(bit)?;
@@ -1172,7 +1215,6 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JC(address) => {
-                println!("carry = {}", self.flags.carry());
                 if self.flags.contains(Flags::CARRY) {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
@@ -1192,7 +1234,6 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JNC(address) => {
-                println!("carry = {}", self.flags.carry());
                 if !self.flags.contains(Flags::CARRY) {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
@@ -1200,7 +1241,6 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JNZ(address) => {
-                println!("accumulator = {}", self.accumulator);
                 if self.accumulator != 0 {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
@@ -1208,7 +1248,6 @@ impl<A: Memory> CPU<A> {
                 Ok(())
             }
             Instruction::JZ(address) => {
-                println!("accumulator = {}", self.accumulator);
                 if self.accumulator == 0 {
                     next_program_counter =
                         ((next_program_counter as i16) + (address as i16)) as u16;
@@ -1229,7 +1268,6 @@ impl<A: Memory> CPU<A> {
                     next_program_counter.to_le_bytes()[1],
                 )?;
                 self.stack_pointer = self.stack_pointer + 2;
-                println!("SP = {:02x}", self.stack_pointer);
                 next_program_counter = address;
                 Ok(())
             }
@@ -1266,7 +1304,6 @@ impl<A: Memory> CPU<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 let data = mem.read_memory(Address::InternalData(self.stack_pointer))?;
                 self.stack_pointer = self.stack_pointer - 1;
-                println!("SP = {:02x}", self.stack_pointer);
                 self.store(address, data)
             }
             Instruction::PUSH(address) => {
@@ -1277,7 +1314,6 @@ impl<A: Memory> CPU<A> {
                 let mem = Rc::get_mut(&mut self.memory).unwrap();
                 mem.write_memory(Address::InternalData(self.stack_pointer + 1), data)?;
                 self.stack_pointer = self.stack_pointer + 1;
-                println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             Instruction::RET => {
@@ -1287,7 +1323,6 @@ impl<A: Memory> CPU<A> {
                     mem.read_memory(Address::InternalData(self.stack_pointer))?,
                 ]);
                 self.stack_pointer = self.stack_pointer - 2;
-                println!("SP = {:02x}", self.stack_pointer);
                 Ok(())
             }
             Instruction::RETI => {
@@ -1297,7 +1332,11 @@ impl<A: Memory> CPU<A> {
                     mem.read_memory(Address::InternalData(self.stack_pointer))?,
                 ]);
                 self.stack_pointer = self.stack_pointer - 2;
-                println!("SP = {:02x}", self.stack_pointer);
+                if self.ip1 == true {
+                    self.ip1 = false;
+                } else if self.ip0 == true {
+                    self.ip0 = false;
+                }
                 Ok(())
             }
             Instruction::RL => {
