@@ -4,7 +4,7 @@ use crate::mcs51::memory::Memory;
 use bitflags::bitflags;
 
 bitflags! {
-    struct TCON: u8 {
+    pub struct TCON: u8 {
         const IT0 = 0b00000001;
         const IE0 = 0b00000010;
         const IT1 = 0b00000100;
@@ -25,7 +25,7 @@ pub enum TimerMode {
 }
 
 bitflags! {
-    struct TMOD: u8 {
+    pub struct TMOD: u8 {
         const T0_M0 =   0b00000001;
         const T0_M1 =   0b00000010;
         const T0_CT =   0b00000100;
@@ -73,6 +73,22 @@ impl Timer {
             t0_value: 0,
             t1_value: 0,
         }
+    }
+
+    pub fn get_timer0_overflow(&self) -> bool {
+        self.tcon.contains(TCON::TF0)
+    }
+
+    pub fn get_timer1_overflow(&self) -> bool {
+        self.tcon.contains(TCON::TF1)
+    }
+
+    pub fn clear_timer0_overflow(&mut self) {
+        self.tcon.remove(TCON::TF0)
+    }
+
+    pub fn clear_timer1_overflow(&mut self) {
+        self.tcon.remove(TCON::TF1)
     }
 }
 

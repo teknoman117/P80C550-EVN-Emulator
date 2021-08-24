@@ -39,6 +39,28 @@ bitflags! {
     }
 }
 
+impl IE {
+    pub fn to_vector(&self) -> Option<u16> {
+        if self.contains(IE::EX0) {
+            Some(0x03)
+        } else if self.contains(IE::ET0) {
+            Some(0x0B)
+        } else if self.contains(IE::EX1) {
+            Some(0x13)
+        } else if self.contains(IE::ET1) {
+            Some(0x1B)
+        } else if self.contains(IE::ES) {
+            Some(0x23)
+        } else if self.contains(IE::EAD) {
+            Some(0x2B)
+        } else if self.contains(IE::EWD) {
+            Some(0x33)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct Peripherals<A, B>
 where
     A: Memory,
@@ -81,6 +103,28 @@ where
             ie: IE::empty(),
             ip: IP::empty(),
             pcon: PCON::empty(),
+        }
+    }
+
+    fn collect_interrupts(&self) -> IE {
+        // collect bitflags for interrupts
+        let mut interrupts = IE::empty();
+        if self.timer.get_timer0_overflow() {
+            interrupts.insert(IE::ET0);
+        }
+        if self.timer.get_timer1_overflow() {
+            interrupts.insert(IE::ET1);
+        }
+
+        // compute enabled interrupts
+        self.ie.intersection(interrupts)
+    }
+
+    fn clear_pending_interrupt(&mut self, interrupts: IE) {
+        if interrupts.contains(IE::ET0) {
+            self.timer.clear_timer0_overflow();
+        } else if interrupts.contains(IE::ET1) {
+            self.timer.clear_timer1_overflow();
         }
     }
 }
@@ -228,16 +272,39 @@ where
     A: Memory,
     B: Memory,
 {
-    fn peek_vector(&mut self) -> Option<(u8, u8)> {
+
+    fn peek_vector(&mut self) -> Option<(u16, u8)> {
         if self.ie.contains(IE::EA) {
-            None
+            // compute interrupts
+            let interrupts = self.collect_interrupts();
+            let high_priority_interrupts = IE::from_bits_truncate(self.ip.bits & interrupts.bits);
+            let low_priority_interrupts = IE::from_bits_truncate(!self.ip.bits & interrupts.bits);
+
+            // return vector
+            if let Some(vector) = high_priority_interrupts.to_vector() {
+                Some((vector, 1))
+            } else if let Some(vector) = low_priority_interrupts.to_vector() {
+                Some((vector, 0))
+            } else {
+                None
+            }
         } else {
             None
         }
     }
 
     fn pop_vector(&mut self) {
+        // compute interrupts
+        let interrupts = self.collect_interrupts();
+        let high_priority_interrupts = IE::from_bits_truncate(self.ip.bits & interrupts.bits);
+        let low_priority_interrupts = IE::from_bits_truncate(!self.ip.bits & interrupts.bits);
 
+        // clear pending interrupt
+        if !high_priority_interrupts.is_empty() {
+            self.clear_pending_interrupt(high_priority_interrupts);
+        } else if !low_priority_interrupts.is_empty() {
+            self.clear_pending_interrupt(low_priority_interrupts);
+        }
     }
 }
 

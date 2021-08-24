@@ -142,7 +142,7 @@ impl Flags {
 
 pub trait InterruptSource {
     // get a vector of with equal or greater priority (return vector and priority)
-    fn peek_vector(&mut self) -> Option<(u8, u8)>;
+    fn peek_vector(&mut self) -> Option<(u16, u8)>;
     fn pop_vector(&mut self);
 }
 
@@ -411,11 +411,6 @@ where
             },
             _ => Err("unsupported addressing mode (store)"),
         }
-    }
-
-    // decode the next instruction or interrupt
-    fn decode_next_instruction(&mut self) -> Result<Instruction, &'static str> {
-        self.decode_next_opcode()
     }
 
     // decode the next instruction
@@ -903,6 +898,31 @@ where
                 AddressingMode::Register(register_from_op(opcode)),
                 AddressingMode::Register(Register::A),
             )),
+        }
+    }
+
+    // decode the next instruction or interrupt
+    fn decode_next_instruction(&mut self) -> Result<Instruction, &'static str> {
+        // check if there is an interrupt available
+        match Rc::get_mut(&mut self.memory).unwrap().peek_vector() {
+            Some((vector, priority)) => {
+                // construct priority that we'd accept
+                let min_priority = if self.ip1 {
+                    2u8
+                } else if self.ip0 {
+                    1u8
+                } else {
+                    0u8
+                };
+
+                // if the priority is sufficient, execute interrupt
+                if priority >= min_priority {
+                    Ok(Instruction::Interrupt(vector, priority))
+                } else {
+                    self.decode_next_opcode()
+                }
+            }
+            None => self.decode_next_opcode()
         }
     }
 
