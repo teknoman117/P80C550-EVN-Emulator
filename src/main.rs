@@ -6,14 +6,19 @@ use mcs51::cpu::Address;
 use mcs51::memory::{Memory, RAM, ROM};
 use mcs51::soc::p80c550;
 
+pub mod escc;
+use escc::ESCC;
+
 struct Peripherals {
     ram: RAM,
+    escc: ESCC,
 }
 
 impl Peripherals {
     fn new() -> Peripherals {
         Peripherals {
             ram: RAM::create_with_size(32768),
+            escc: ESCC::new(),
         }
     }
 }
@@ -34,13 +39,8 @@ impl Memory for Peripherals {
                             println!("spi.control read");
                             Ok(0x80)
                         }
-                        0x9400 => {
-                            println!("am85c30.channel.b.control");
-                            Ok(0x00)
-                        }
-                        0x9401 => {
-                            println!("am85c30.channel.b.data");
-                            Ok(0x00)
+                        0x9400..=0x9403 => {
+                            self.escc.read_memory(address)
                         }
                         _ => Err("unused address (read)"),
                     }
@@ -66,15 +66,8 @@ impl Memory for Peripherals {
                             println!("spi.control = {:x}", data);
                             Ok(())
                         }
-                        0x9400 => {
-                            // uart channel b control
-                            println!("am85c30.channel.b.control = {:x}", data);
-                            Ok(())
-                        }
-                        0x9401 => {
-                            // uart channel b data
-                            println!("am85c30.channel.b.data = {:x}", data);
-                            Ok(())
+                        0x9400..=0x9403 => {
+                            self.escc.write_memory(address, data)
                         }
                         _ => Err("unused address (write)"),
                     }
@@ -84,7 +77,9 @@ impl Memory for Peripherals {
         }
     }
 
-    fn tick(&mut self) {}
+    fn tick(&mut self) {
+        self.escc.tick()
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
