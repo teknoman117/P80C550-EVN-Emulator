@@ -22,8 +22,18 @@ impl Memory for ESCC {
                 let address = a & 3;
                 match address {
                     0 => {
-                        println!("am85c30.channel.b.control");
-                        Ok(0x00)
+                        let result = match self.register_b {
+                            0 => {
+                                /* status register (set tx empty) */
+                                Ok(0x04)
+                            }
+                            _ => {
+                                println!("implemented read register {:?}", self.register_b);
+                                Ok(0x00)
+                            }
+                        };
+                        self.register_b = 0;
+                        result
                     }
                     1 => {
                         println!("am85c30.channel.b.data");
@@ -31,6 +41,7 @@ impl Memory for ESCC {
                     }
                     2 => {
                         println!("am85c30.channel.a.control");
+                        self.register_a = 0;
                         Ok(0x00)
                     }
                     3 => {
@@ -49,8 +60,61 @@ impl Memory for ESCC {
                 let address = a & 3;
                 match address {
                     0 => {
-                        // uart channel b control
-                        println!("am85c30.channel.b.control = {:x}", data);
+                        let mut next_register = 0;
+                        match self.register_b {
+                            0 => {
+                                let mut register_select = data & 0x07;
+                                let action = (data >> 3) & 0x07;
+                                let reset = (data >> 6) & 0x03;
+                                match action {
+                                    0 => {
+                                        /* null code */
+                                    }
+                                    1 => {
+                                        register_select = register_select + 8;
+                                    }
+                                    2 => {
+                                        /* reset ext/status interrupts */
+                                    }
+                                    3 => {
+                                        /* send abort */
+                                    }
+                                    4 => {
+                                        /* enable interrupt on next rx character */
+                                    }
+                                    5 => {
+                                        /* reset tx interrupt pending */
+                                    }
+                                    6 => {
+                                        /* reset error */
+                                    }
+                                    7 => {
+                                        /* reset highest IUS (??) */
+                                    }
+                                    _ => panic!("impossible")
+                                }
+                                match reset {
+                                    0 => {
+                                        /* null code */
+                                    }
+                                    1 => {
+                                        /* reset rx CRC checker */
+                                    }
+                                    2 => {
+                                        /* reset tx CRC generator */
+                                    }
+                                    3 => {
+                                        /* reset tx underrun / end of message latch */
+                                    }
+                                    _ => panic!("impossible")
+                                }
+                                next_register = register_select;
+                            }
+                            _ => {
+                                println!("unimplemented write register {:?} = {:x}", self.register_b, data);
+                            }
+                        }
+                        self.register_b = next_register;
                         Ok(())
                     }
                     1 => {
