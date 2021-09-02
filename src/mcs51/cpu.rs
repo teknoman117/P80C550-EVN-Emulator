@@ -175,7 +175,7 @@ where
             program_counter: 0,
             memory: memory,
             ip0: false,
-            ip1: false
+            ip1: false,
         }
     }
 
@@ -922,7 +922,7 @@ where
                     self.decode_next_opcode()
                 }
             }
-            None => self.decode_next_opcode()
+            None => self.decode_next_opcode(),
         }
     }
 

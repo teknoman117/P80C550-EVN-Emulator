@@ -67,51 +67,32 @@ impl Memory for ESCC {
                                 let action = (data >> 3) & 0x07;
                                 let reset = (data >> 6) & 0x03;
                                 match action {
-                                    0 => {
-                                        /* null code */
-                                    }
+                                    0 => { /* null code */ }
                                     1 => {
                                         register_select = register_select + 8;
                                     }
-                                    2 => {
-                                        /* reset ext/status interrupts */
-                                    }
-                                    3 => {
-                                        /* send abort */
-                                    }
-                                    4 => {
-                                        /* enable interrupt on next rx character */
-                                    }
-                                    5 => {
-                                        /* reset tx interrupt pending */
-                                    }
-                                    6 => {
-                                        /* reset error */
-                                    }
-                                    7 => {
-                                        /* reset highest IUS (??) */
-                                    }
-                                    _ => panic!("impossible")
+                                    2 => { /* reset ext/status interrupts */ }
+                                    3 => { /* send abort */ }
+                                    4 => { /* enable interrupt on next rx character */ }
+                                    5 => { /* reset tx interrupt pending */ }
+                                    6 => { /* reset error */ }
+                                    7 => { /* reset highest IUS (??) */ }
+                                    _ => panic!("impossible"),
                                 }
                                 match reset {
-                                    0 => {
-                                        /* null code */
-                                    }
-                                    1 => {
-                                        /* reset rx CRC checker */
-                                    }
-                                    2 => {
-                                        /* reset tx CRC generator */
-                                    }
-                                    3 => {
-                                        /* reset tx underrun / end of message latch */
-                                    }
-                                    _ => panic!("impossible")
+                                    0 => { /* null code */ }
+                                    1 => { /* reset rx CRC checker */ }
+                                    2 => { /* reset tx CRC generator */ }
+                                    3 => { /* reset tx underrun / end of message latch */ }
+                                    _ => panic!("impossible"),
                                 }
                                 next_register = register_select;
                             }
                             _ => {
-                                println!("unimplemented write register {:?} = {:x}", self.register_b, data);
+                                println!(
+                                    "unimplemented write register {:?} = {:x}",
+                                    self.register_b, data
+                                );
                             }
                         }
                         self.register_b = next_register;

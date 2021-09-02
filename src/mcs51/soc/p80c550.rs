@@ -272,7 +272,6 @@ where
     A: Memory,
     B: Memory,
 {
-
     fn peek_vector(&mut self) -> Option<(u16, u8)> {
         if self.ie.contains(IE::EA) {
             // compute interrupts

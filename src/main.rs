@@ -23,7 +23,11 @@ impl Peripherals {
         Peripherals {
             ram: RAM::create_with_size(32768),
             escc: ESCC::new(),
-            spi: SPI::new(),
+            spi: SPI::new([
+                Rc::new(spi::NullDevice::new()),
+                Rc::new(spi::NullDevice::new()),
+                Rc::new(spi::NullDevice::new()),
+            ]),
         }
     }
 }
@@ -36,12 +40,8 @@ impl Memory for Peripherals {
                     self.ram.read_memory(address)
                 } else {
                     match a {
-                        0x8400..=0x8401 => {
-                            self.spi.read_memory(address)
-                        }
-                        0x9400..=0x9403 => {
-                            self.escc.read_memory(address)
-                        }
+                        0x8400..=0x8401 => self.spi.read_memory(address),
+                        0x9400..=0x9403 => self.escc.read_memory(address),
                         _ => Err("unused address (read)"),
                     }
                 }
@@ -56,12 +56,8 @@ impl Memory for Peripherals {
                     self.ram.write_memory(address, data)
                 } else {
                     match a {
-                        0x8400..=0x8401 => {
-                            self.spi.write_memory(address, data)
-                        }
-                        0x9400..=0x9403 => {
-                            self.escc.write_memory(address, data)
-                        }
+                        0x8400..=0x8401 => self.spi.write_memory(address, data),
+                        0x9400..=0x9403 => self.escc.write_memory(address, data),
                         _ => Err("unused address (write)"),
                     }
                 }
@@ -71,7 +67,8 @@ impl Memory for Peripherals {
     }
 
     fn tick(&mut self) {
-        self.escc.tick()
+        self.escc.tick();
+        self.spi.tick();
     }
 }
 
@@ -87,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut cpu = p80c550::create(rom, peripherals);
 
     // run 1 second at 11.0592 MHz
-    for _ in 1..9216000 {
+    for _ in 1..921600 {
         cpu.step()?;
     }
 
