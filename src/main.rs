@@ -7,11 +7,15 @@ use mcs51::memory::{Memory, RAM, ROM};
 use mcs51::soc::p80c550;
 
 pub mod escc;
+pub mod spi;
+
 use escc::ESCC;
+use spi::SPI;
 
 struct Peripherals {
     ram: RAM,
     escc: ESCC,
+    spi: SPI,
 }
 
 impl Peripherals {
@@ -19,6 +23,7 @@ impl Peripherals {
         Peripherals {
             ram: RAM::create_with_size(32768),
             escc: ESCC::new(),
+            spi: SPI::new(),
         }
     }
 }
@@ -31,13 +36,8 @@ impl Memory for Peripherals {
                     self.ram.read_memory(address)
                 } else {
                     match a {
-                        0x8400 => {
-                            println!("spi.data read");
-                            Ok(0xFF)
-                        }
-                        0x8401 => {
-                            println!("spi.control read");
-                            Ok(0x80)
+                        0x8400..=0x8401 => {
+                            self.spi.read_memory(address)
                         }
                         0x9400..=0x9403 => {
                             self.escc.read_memory(address)
@@ -56,15 +56,8 @@ impl Memory for Peripherals {
                     self.ram.write_memory(address, data)
                 } else {
                     match a {
-                        0x8400 => {
-                            // spi control
-                            println!("spi.data = {:x}", data);
-                            Ok(())
-                        }
-                        0x8401 => {
-                            // spi control
-                            println!("spi.control = {:x}", data);
-                            Ok(())
+                        0x8400..=0x8401 => {
+                            self.spi.write_memory(address, data)
                         }
                         0x9400..=0x9403 => {
                             self.escc.write_memory(address, data)
@@ -94,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut cpu = p80c550::create(rom, peripherals);
 
     // run 1 second at 11.0592 MHz
-    for _ in 1..921600 {
+    for _ in 1..9216000 {
         cpu.step()?;
     }
 
