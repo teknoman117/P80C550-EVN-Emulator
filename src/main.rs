@@ -7,9 +7,12 @@ use mcs51::memory::{Memory, RAM, ROM};
 use mcs51::soc::p80c550;
 
 pub mod escc;
+pub mod sdcard;
 pub mod spi;
 
 use escc::ESCC;
+use sdcard::SdCard;
+use spi::NullDevice;
 use spi::SPI;
 
 struct Peripherals {
@@ -24,9 +27,9 @@ impl Peripherals {
             ram: RAM::create_with_size(32768),
             escc: ESCC::new(),
             spi: SPI::new([
-                Rc::new(spi::NullDevice::new()),
-                Rc::new(spi::NullDevice::new()),
-                Rc::new(spi::NullDevice::new()),
+                Rc::new(NullDevice::new()),
+                Rc::new(NullDevice::new()),
+                Rc::new(SdCard::new()),
             ]),
         }
     }
